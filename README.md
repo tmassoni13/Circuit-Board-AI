@@ -5,7 +5,7 @@ Current test build for the PCB camera/2D-axis alignment station.
 This version is intentionally small. It keeps only the pieces being used right
 now:
 
-- the browser interface in `interface_preview.html`
+- the browser interface in `user_interface.html`
 - the local GRBL axis bridge
 - manual GRBL axis test commands
 - tiny GRBL serial-number engraving G-code generation
@@ -76,7 +76,7 @@ sudo reboot
 Open the UI manually if kiosk mode does not open:
 
 ```bash
-chromium-browser http://127.0.0.1:5500/interface_preview.html
+chromium-browser http://127.0.0.1:5500/user_interface.html
 ```
 
 ## Updating From GitHub
@@ -114,7 +114,7 @@ The installer handles these automatically, but they are useful while debugging:
 ```bash
 python3 -m pcb_inspector.main axis-bridge
 python3 -m pcb_inspector.main serve-ui
-chromium-browser --kiosk http://127.0.0.1:5500/interface_preview.html
+chromium-browser --kiosk http://127.0.0.1:5500/user_interface.html
 ```
 
 ## Windows Development Startup

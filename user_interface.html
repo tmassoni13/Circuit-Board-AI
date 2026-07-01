@@ -1,0 +1,3425 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PCB Inline Inspector Preview</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #0c1014;
+        color: #eef2f6;
+        font-family: Bahnschrift, "Roboto Condensed", "Arial Narrow", "DejaVu Sans Condensed", Arial, Helvetica, sans-serif;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+        height: 100vh;
+        overflow: hidden;
+        padding: 12px;
+        background: #111820;
+        border-right: 2px solid #2f3a45;
+      }
+
+      .brand {
+        padding-bottom: 10px;
+        border-bottom: 2px solid #2f3a45;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 18px;
+        font-weight: 900;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .subtitle {
+        margin-top: 4px;
+        color: #9aa7b4;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .status {
+        border-left: 8px solid #f59e0b;
+        background: #1a232c;
+        padding: 12px;
+        min-height: 78px;
+      }
+
+      .status.running {
+        border-left-color: #15a17f;
+        background: #123026;
+      }
+
+      .status.searching {
+        border-left-color: #f59e0b;
+        background: #2f260e;
+      }
+
+      .status.error {
+        border-left-color: #bd2d2d;
+        background: #321819;
+      }
+
+      .status-label {
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .status-value {
+        margin-top: 6px;
+        font-size: 24px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .counts {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .count {
+        border: 2px solid #2f3a45;
+        background: #111820;
+        padding: 8px 10px;
+      }
+
+      .count-label {
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .count-value {
+        margin-top: 4px;
+        font-size: 22px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      .settings {
+        display: grid;
+        gap: 16px;
+        align-content: start;
+      }
+
+      .settings-group {
+        display: grid;
+        gap: 8px;
+      }
+
+      .settings-section-title {
+        color: #cbd5e1;
+        font-size: 16px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .settings-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(95px, 120px)) 80px;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .color-swatch input {
+        width: 42px;
+        height: 42px;
+        aspect-ratio: 1 / 1;
+        padding: 0;
+        border: 2px solid #3b4652;
+        border-radius: 2px;
+        background: #0b0f13;
+      }
+
+      .color-swatch {
+        width: 42px;
+      }
+
+      .field {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .field label {
+        color: #94a3b8;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .field input {
+        width: 100%;
+        min-width: 0;
+        height: 34px;
+        border: 2px solid #3b4652;
+        border-radius: 2px;
+        background: #0b0f13;
+        color: #f8fafc;
+        font: 900 15px Bahnschrift, "Roboto Condensed", Arial, sans-serif;
+        text-align: center;
+      }
+
+      .field select {
+        width: 100%;
+        min-width: 0;
+        height: 34px;
+        border: 2px solid #3b4652;
+        border-radius: 2px;
+        background: #0b0f13;
+        color: #f8fafc;
+        font: 900 13px Bahnschrift, "Roboto Condensed", Arial, sans-serif;
+        text-transform: uppercase;
+      }
+
+      button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 52px;
+        border: 2px solid #3b4652;
+        border-radius: 2px;
+        background: #202a34;
+        color: #f8fafc;
+        font-size: 15px;
+        font-weight: 900;
+        text-transform: uppercase;
+        cursor: pointer;
+        touch-action: manipulation;
+        user-select: none;
+      }
+
+      .start {
+        background: #0b6b57;
+        border-color: #15a17f;
+      }
+
+      .start.wide {
+        grid-column: span 2;
+      }
+
+      .stop {
+        background: #7b1d1d;
+        border-color: #bd2d2d;
+      }
+
+      .stop.wide {
+        grid-column: span 2;
+      }
+
+      .retry {
+        background: #9a6400;
+        border-color: #f59e0b;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .wide {
+        grid-column: span 2;
+      }
+
+      .panel {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        background: #111820;
+        border: 2px solid #2f3a45;
+        border-radius: 2px;
+        padding: 0;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        color: #cbd5e1;
+        font-size: 15px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .camera-area {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: #070a0d;
+      }
+
+      .topbar {
+        display: flex;
+        flex: 0 0 44px;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 44px;
+        padding: 0 14px;
+        border-bottom: 2px solid #2f3a45;
+        background: #111820;
+      }
+
+      .topbar-title {
+        font-size: 15px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .topbar-left {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        min-width: 0;
+      }
+
+      .topbar-specs {
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 400;
+        text-transform: none;
+        white-space: nowrap;
+      }
+
+      .topbar-meta {
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .capture-button {
+        width: auto;
+        min-height: 30px;
+        padding: 0 12px;
+        border-color: #506070;
+        background: #202a34;
+        font-size: 11px;
+      }
+
+      .feed {
+        display: grid;
+        place-items: center;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        padding: 10px;
+      }
+
+      .feed-frame {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        max-height: 100%;
+        border: 2px solid #2f3a45;
+        border-radius: 2px;
+        background: #05080b;
+        position: relative;
+        overflow: hidden;
+        cursor: crosshair;
+      }
+
+      .settings-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        background: rgba(5, 8, 11, 0.92);
+      }
+
+      .settings-overlay.active {
+        display: flex;
+      }
+
+      .settings-dialog {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        width: 100%;
+        height: 100%;
+        padding: 20px;
+        border: 2px solid #2f3a45;
+        background: #111820;
+        box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+      }
+
+      .settings-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #2f3a45;
+      }
+
+      .settings-heading {
+        font-size: 24px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .settings-close {
+        width: 36px;
+        min-width: 36px;
+        min-height: 36px;
+        padding: 0;
+        border-color: #506070;
+        background: #202a34;
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .settings-note {
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+
+      .settings-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .image-log-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+        min-height: 0;
+        overflow: auto;
+      }
+
+      .image-folder-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(94px, 104px));
+        gap: 14px;
+        align-items: start;
+      }
+
+      .folder-tile {
+        display: grid;
+        justify-items: center;
+        align-content: start;
+        gap: 7px;
+        min-height: 92px;
+        padding: 8px 6px;
+        border: 0;
+        background: transparent;
+        color: #f8fafc;
+        font-size: 11px;
+        line-height: 1.15;
+        text-align: center;
+      }
+
+      .folder-count {
+        color: #94a3b8;
+        font-size: 10px;
+        font-weight: 700;
+      }
+
+      .folder-icon {
+        position: relative;
+        width: 58px;
+        height: 42px;
+        border: 2px solid #d39b2f;
+        border-radius: 3px;
+        background: #c9881f;
+      }
+
+      .folder-icon::before {
+        content: "";
+        position: absolute;
+        left: -2px;
+        top: -12px;
+        width: 28px;
+        height: 12px;
+        border: 2px solid #d39b2f;
+        border-bottom: 0;
+        border-radius: 3px 3px 0 0;
+        background: #e0a538;
+      }
+
+      .folder-plus {
+        display: grid;
+        place-items: center;
+        width: 58px;
+        height: 42px;
+        border: 0;
+        background: transparent;
+        color: #f8fafc;
+        font-size: 30px;
+        font-weight: 900;
+      }
+
+      .image-log-path {
+        display: none;
+        align-items: center;
+        gap: 10px;
+        color: #94a3b8;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .image-log-path.active {
+        display: flex;
+      }
+
+      .path-button {
+        width: auto;
+        min-height: 30px;
+        padding: 0 12px;
+        font-size: 11px;
+      }
+
+      .image-log-card {
+        display: grid;
+        gap: 8px;
+        align-content: start;
+        border: 2px solid #2f3a45;
+        background: #0b0f13;
+        padding: 8px;
+      }
+
+      .image-open-button {
+        display: block;
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+
+      .image-log-card img {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        border: 1px solid #3b4652;
+        background: #05080b;
+      }
+
+      .image-log-name {
+        color: #f8fafc;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .image-log-meta {
+        color: #94a3b8;
+        font: 11px Consolas, monospace;
+      }
+
+      .image-delete {
+        min-height: 30px;
+        border-color: #bd2d2d;
+        background: #7b1d1d;
+        font-size: 11px;
+      }
+
+      .image-preview {
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        display: none;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 12px;
+        padding: 20px;
+        background: rgba(5, 8, 11, 0.96);
+      }
+
+      .image-preview.active {
+        display: grid;
+      }
+
+      .image-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+
+      .image-preview-title {
+        font-size: 18px;
+        font-weight: 900;
+      }
+
+      .image-preview img {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        object-fit: contain;
+        background: #05080b;
+        border: 2px solid #2f3a45;
+      }
+
+      .empty-log {
+        display: grid;
+        place-items: center;
+        min-height: 180px;
+        border: 2px dashed #2f3a45;
+        color: #94a3b8;
+        font-size: 14px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .webcam-preview {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: #05080b;
+      }
+
+      .board-overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .camera-message {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        color: #94a3b8;
+        font-size: 14px;
+        font-weight: 900;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .log-view {
+        flex: 1;
+        display: none;
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        max-width: 100%;
+        overflow: auto;
+        border: 0;
+        background: #0b0f13;
+        padding: 10px;
+        color: #cbd5e1;
+        font-family: Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: pre-wrap;
+      }
+
+      .log-view.active {
+        display: block;
+      }
+
+      @media (max-width: 900px) and (orientation: landscape) {
+        .shell {
+          grid-template-columns: 280px minmax(0, 1fr);
+        }
+
+        .sidebar {
+          gap: 8px;
+          padding: 8px;
+        }
+
+        .status {
+          min-height: 68px;
+          padding: 10px;
+        }
+
+        .status-value {
+          font-size: 21px;
+        }
+
+        .count {
+          padding: 6px 8px;
+        }
+
+        .count-value {
+          font-size: 19px;
+        }
+
+        .settings {
+          gap: 10px;
+        }
+
+        .field input {
+          height: 34px;
+          font-size: 15px;
+        }
+
+        button {
+          min-height: 46px;
+          font-size: 14px;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .shell {
+          grid-template-columns: 280px minmax(0, 1fr);
+        }
+      }
+
+      @media (max-width: 1100px) and (orientation: landscape) {
+        .shell {
+          grid-template-columns: 230px minmax(0, 1fr);
+        }
+
+        .sidebar {
+          gap: 7px;
+          padding: 8px;
+        }
+
+        .brand {
+          padding-bottom: 7px;
+        }
+
+        h1 {
+          font-size: 15px;
+        }
+
+        .subtitle {
+          font-size: 10px;
+        }
+
+        .status {
+          min-height: 64px;
+          padding: 9px 10px;
+          border-left-width: 7px;
+        }
+
+        .status-label,
+        .count-label {
+          font-size: 10px;
+        }
+
+        .status-value {
+          font-size: 20px;
+        }
+
+        .controls,
+        .counts {
+          gap: 6px;
+        }
+
+        .count {
+          padding: 6px 8px;
+        }
+
+        .count-value {
+          font-size: 18px;
+        }
+
+        button {
+          min-height: 42px;
+          font-size: 13px;
+        }
+
+        .log-view {
+          padding: 7px;
+          font-size: 10px;
+          line-height: 1.25;
+        }
+
+        .topbar {
+          flex: 0 0 auto;
+          min-height: 40px;
+          gap: 8px;
+          padding: 5px 8px;
+        }
+
+        .topbar-left {
+          flex: 1 1 auto;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .topbar-title {
+          font-size: 13px;
+        }
+
+        .topbar-specs {
+          flex-wrap: wrap;
+          gap: 6px 12px;
+          font-size: 10px;
+          line-height: 1.2;
+        }
+
+        .topbar-actions {
+          flex: 0 1 auto;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 5px;
+        }
+
+        .capture-button {
+          min-height: 26px;
+          padding: 0 8px;
+          font-size: 9px;
+        }
+
+        .topbar-meta {
+          flex-basis: 100%;
+          text-align: right;
+          font-size: 9px;
+          line-height: 1.1;
+        }
+
+        .feed {
+          padding: 6px;
+        }
+
+        .settings-overlay {
+          padding: 12px;
+        }
+
+        .settings-dialog {
+          gap: 10px;
+          padding: 12px;
+        }
+
+        .settings-heading {
+          font-size: 20px;
+        }
+
+        .settings-section-title {
+          font-size: 14px;
+        }
+
+        .settings-grid {
+          grid-template-columns: repeat(2, minmax(76px, 96px)) 52px;
+          gap: 7px;
+        }
+
+        .field input,
+        .field select {
+          height: 30px;
+          font-size: 13px;
+        }
+
+        .color-swatch,
+        .color-swatch input {
+          width: 34px;
+          height: 34px;
+        }
+      }
+
+      @media (max-width: 850px) and (orientation: landscape) {
+        .shell {
+          grid-template-columns: 190px minmax(0, 1fr);
+        }
+
+        .sidebar {
+          gap: 5px;
+          padding: 6px;
+        }
+
+        h1 {
+          font-size: 13px;
+        }
+
+        .subtitle,
+        .status-label,
+        .count-label {
+          font-size: 9px;
+        }
+
+        .status {
+          min-height: 54px;
+          padding: 7px 8px;
+        }
+
+        .status-value {
+          font-size: 17px;
+        }
+
+        button {
+          min-height: 36px;
+          font-size: 11px;
+        }
+
+        .count {
+          padding: 5px 6px;
+        }
+
+        .count-value {
+          font-size: 15px;
+        }
+
+        .topbar {
+          min-height: 34px;
+          padding: 4px 6px;
+        }
+
+        .topbar-title {
+          font-size: 12px;
+        }
+
+        .topbar-specs {
+          gap: 4px 8px;
+          font-size: 9px;
+        }
+
+        .capture-button {
+          min-height: 23px;
+          padding: 0 6px;
+          font-size: 8px;
+        }
+
+        .topbar-meta {
+          display: none;
+        }
+
+        .feed {
+          padding: 4px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <section class="brand">
+          <h1>PCB Inline Inspector</h1>
+          <p class="subtitle">Conveyor AOI station</p>
+        </section>
+
+        <section class="status">
+          <div class="status-label">Machine Status</div>
+          <div class="status-value">OFF</div>
+        </section>
+
+        <section class="controls">
+          <button id="machine-toggle" class="start wide" type="button" onclick="toggleMachine()">Start</button>
+          <button id="startup-retry" class="retry hidden" type="button" onclick="retryStartup()">Retry</button>
+          <button id="startup-stop" class="stop hidden" type="button" onclick="resetMachine()">Stop</button>
+        </section>
+
+        <section class="counts">
+          <div class="count">
+            <div class="count-label">Passed</div>
+            <div class="count-value" id="passed-count">0</div>
+          </div>
+          <div class="count">
+            <div class="count-label">Failed</div>
+            <div class="count-value" id="failed-count">0</div>
+          </div>
+        </section>
+
+        <section class="controls">
+          <button class="wide" type="button" onclick="openSettings()">Settings</button>
+        </section>
+
+        <section class="controls">
+          <button class="wide" type="button" onclick="openImageLog()">Image Log</button>
+        </section>
+
+        <section class="panel">
+          <pre id="terminal-log" class="log-view active">[RESULT] PASS    No fatal defects    components=0    fatal_defects=0    runs/board_001_review.png
+[RESULT] PASS    No fatal defects    components=0    fatal_defects=0    runs/board_002_review.png</pre>
+        </section>
+      </aside>
+
+      <section class="camera-area">
+        <div class="topbar">
+          <div class="topbar-left">
+            <div class="topbar-title">Camera Feed</div>
+            <div class="topbar-specs" id="board-fov-summary">
+              <span>BOARD: 100 x 100 mm</span>
+              <span>FOV: 150 x 150 mm</span>
+              <span>IPB: 1</span>
+              <span>FOLDER: Manual Captures</span>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <button class="capture-button" type="button" onclick="connectAxis()">Connect Axis</button>
+            <button class="capture-button" type="button" onclick="testAxisMove()">Test Axis</button>
+            <button class="capture-button" type="button" onclick="testCapturePositions()">Test Capture</button>
+            <button class="capture-button" type="button" onclick="setAxisZero()">Set Zero</button>
+            <button class="capture-button" type="button" onclick="captureStillImage()">Capture</button>
+            <div class="topbar-meta" id="camera-meta">ELP USB Camera | Test Mode</div>
+          </div>
+        </div>
+        <div class="feed">
+          <div class="feed-frame" oncontextmenu="sampleBoardColorFromClick(event)">
+            <video id="webcam-preview" class="webcam-preview" autoplay muted playsinline></video>
+            <canvas id="board-overlay" class="board-overlay"></canvas>
+            <div id="camera-message" class="camera-message">Opening camera</div>
+            <div id="settings-overlay" class="settings-overlay">
+              <section class="settings-dialog">
+                <div class="settings-header">
+                  <div>
+                    <div class="settings-heading">Settings</div>
+                    <p class="settings-note">Board size and camera field of view determine whether the 2D axis needs to move.</p>
+                  </div>
+                  <div class="settings-actions">
+                    <button class="settings-close" type="button" onclick="closeSettings()" aria-label="Close settings">X</button>
+                  </div>
+                </div>
+
+                <section class="settings">
+                  <div class="settings-group">
+                    <div class="settings-section-title">Board</div>
+                    <div class="settings-grid">
+                      <div class="field">
+                        <label for="board-width-mm">Width mm</label>
+                        <input id="board-width-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                      </div>
+                      <div class="field">
+                        <label for="board-height-mm">Height mm</label>
+                        <input id="board-height-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                      </div>
+                      <div class="field color-swatch">
+                        <label for="board-background-color">Color</label>
+                        <input id="board-background-color" type="color" value="#002d04" oninput="autoApplySettings()">
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="settings-group">
+                    <div class="settings-section-title">Camera FOV</div>
+                    <div class="settings-grid">
+                      <div class="field">
+                        <label for="camera-fov-width-mm">Width mm</label>
+                        <input id="camera-fov-width-mm" type="number" min="10" max="500" step="1" value="180" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                      </div>
+                      <div class="field">
+                        <label for="camera-fov-height-mm">Height mm</label>
+                        <input id="camera-fov-height-mm" type="number" min="10" max="500" step="1" value="140" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                      </div>
+                    </div>
+                    <div class="settings-actions">
+                      <button type="button" onclick="resetSettingsToDefaults()">Reset Defaults</button>
+                    </div>
+                  </div>
+
+                  <div class="settings-group">
+                    <div class="settings-section-title">Auto Capture</div>
+                    <div class="settings-grid">
+                      <div class="field">
+                        <label for="auto-capture-folder">Current Folder</label>
+                        <select id="auto-capture-folder" onchange="autoApplySettings()"></select>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </section>
+            </div>
+            <div id="image-log-overlay" class="settings-overlay">
+              <section class="settings-dialog">
+                <div class="settings-header">
+                  <div>
+                    <div class="settings-heading">Image Log</div>
+                    <p class="settings-note">Captured images are numbered by board and image position.</p>
+                  </div>
+                  <div class="settings-actions">
+                    <button class="settings-close" type="button" onclick="closeImageLog()" aria-label="Close image log">X</button>
+                  </div>
+                </div>
+                <div id="image-log-path" class="image-log-path">
+                  <button class="path-button" type="button" onclick="showImageFolderRoot()">Back</button>
+                  <span id="image-log-path-label">Image Log</span>
+                </div>
+                <div id="image-folder-grid" class="image-folder-grid"></div>
+                <div id="image-log-grid" class="image-log-grid"></div>
+                <div id="image-preview" class="image-preview">
+                  <div class="image-preview-header">
+                    <div id="image-preview-title" class="image-preview-title">Image</div>
+                    <button class="settings-close" type="button" onclick="closeImagePreview()" aria-label="Close image preview">X</button>
+                  </div>
+                  <img id="image-preview-img" alt="Captured board preview">
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>
+      const AUTO_SCAN_INTERVAL_MS = 250;
+      const BOARD_MIN_CONFIDENCE = 0.75;
+      const BOARD_BOX_WIDTH_RATIO = 0.62;
+      const BOARD_BOX_HEIGHT_RATIO = 0.82;
+      const BOARD_STABLE_FRAME_COUNT = 5;
+      const BOARD_LEAVE_FRAME_COUNT = 8;
+      const BOARD_PRESENCE_PIXEL_RATIO = 0.002;
+      const BOARD_PRESENCE_FRAME_COUNT = 4;
+      const BOARD_CANDIDATE_OVERLAP = 0.35;
+      const CAPTURE_BOTTOM_MARGIN_RATIO = 0.04;
+      const CAPTURE_CORNER_ALIGN_MAX_STEPS = 8;
+      const CAPTURE_CORNER_ALIGN_DEADBAND = 0.012;
+      const CAPTURE_CORNER_FEED_MM_MIN = 3000;
+      const CAPTURE_CORNER_MIN_STEP_MM = 1.5;
+      const CAPTURE_CORNER_MAX_STEP_MM = 30;
+      const CAPTURE_CORNER_MM_PER_OFFSET = 160;
+      const CAPTURE_CORNER_SETTLE_MS = 500;
+      const CAPTURE_BOTTOM_SIGN_Y = 1;
+      const AUTO_CAPTURE_ENABLED = false;
+      const AXIS_AUTO_ALIGN_ENABLED = true;
+      const AXIS_BRIDGE_URL = "http://127.0.0.1:8765";
+      const AXIS_FEED_MM_MIN = 6000;
+      const AXIS_MIN_FEED_MM_MIN = 1800;
+      const AXIS_ALIGN_DEADBAND = 0.025;
+      const AXIS_CORRECTION_MM_PER_OFFSET = 110;
+      const AXIS_MIN_STEP_MM = 1.5;
+      const AXIS_MAX_STEP_MM = 30;
+      const AXIS_MOVE_COOLDOWN_MS = 60;
+      const AXIS_NEAR_ALIGN_COOLDOWN_MS = 350;
+      const AXIS_MIN_GREEN_PIXEL_RATIO = 0.01;
+      const AXIS_SMOOTHING = 0.72;
+      const AXIS_STOP_ALIGNMENT = 0.88;
+      const AXIS_SIGN_X = -1;
+      const AXIS_SIGN_Y = 1;
+      const SEARCH_MOVE_MM = 50;
+      const DEFAULT_BOARD_WIDTH_MM = 100;
+      const DEFAULT_BOARD_HEIGHT_MM = 100;
+      const DEFAULT_BOARD_BACKGROUND_COLOR = "#002d04";
+      const DEFAULT_CAMERA_FOV_WIDTH_MM = 150;
+      const DEFAULT_CAMERA_FOV_HEIGHT_MM = 150;
+      const CAPTURE_OVERLAP_MM = 15;
+      const CAPTURE_PRE_IMAGE_SETTLE_MS = 1000;
+      const CAPTURE_SECOND_IMAGE_PRE_SETTLE_MS = 2000;
+      const CAPTURE_POST_IMAGE_SETTLE_MS = 1000;
+      const CAPTURE_SCAN_SIGN_X = -1;
+      const CAPTURE_SCAN_SIGN_Y = 1;
+      const AXIS_ABSOLUTE_MIN_X_MM = -180;
+      const AXIS_ABSOLUTE_MAX_X_MM = 180;
+      const AXIS_ABSOLUTE_MIN_Y_MM = -175;
+      const AXIS_ABSOLUTE_MAX_Y_MM = 175;
+      const SEARCH_FEED_MM_MIN = 2500;
+      const SEARCH_COOLDOWN_MS = 1400;
+      const SEARCH_FAST_MOVE_MM = 100;
+      const SEARCH_OBVIOUS_ALIGNMENT = 0.60;
+      const SEARCH_OBVIOUS_GREEN_PIXEL_RATIO = 0.015;
+      const DEFAULT_IMAGE_FOLDER_NAME = "Manual Captures";
+
+      let autoScanTimer = null;
+      let stableBoardFrames = 0;
+      let missingBoardFrames = 0;
+      let lastBoardBox = null;
+      let capturedCurrentBoard = false;
+      let lastAxisHoldLogTime = 0;
+      let axisBridgeConnected = false;
+      let axisMoveInFlight = false;
+      let lastAxisMoveTime = 0;
+      let currentAxisMoveCooldownMs = AXIS_MOVE_COOLDOWN_MS;
+      let smoothedAxisOffsetX = 0;
+      let smoothedAxisOffsetY = 0;
+      let searchIndex = 0;
+      let searchStartXmm = null;
+      let searchStartYmm = null;
+      let searchXmm = null;
+      let searchYmm = null;
+      let lastSearchMoveTime = 0;
+      let searchMoveInFlight = false;
+      let searchPattern = [];
+      let inspectionMode = "search";
+      let cameraConnected = false;
+      let machineRunning = false;
+      let imageFolders = [
+        {
+          name: DEFAULT_IMAGE_FOLDER_NAME,
+          entries: []
+        }
+      ];
+      let activeImageFolderName = DEFAULT_IMAGE_FOLDER_NAME;
+      let autoCaptureFolderName = DEFAULT_IMAGE_FOLDER_NAME;
+      let imageLogView = "folders";
+      let nextBoardNumber = 1;
+      let nextImageNumberForBoard = 1;
+      let boardPresenceFrames = 0;
+      let boardInRange = false;
+      let pendingBoardBox = null;
+      let boardWorkflowInProgress = false;
+
+      function setMachineStatus(value, state = "idle") {
+        const status = document.querySelector(".status");
+        const statusValue = document.querySelector(".status-value");
+        statusValue.textContent = value;
+        status.classList.toggle("running", state === "running");
+        status.classList.toggle("searching", state === "searching");
+        status.classList.toggle("error", state === "error");
+      }
+
+      function setMachineRunning(running) {
+        machineRunning = running;
+        setStartupControlMode("normal");
+        const button = document.getElementById("machine-toggle");
+        button.textContent = running ? "Stop" : "Start";
+        button.classList.toggle("start", !running);
+        button.classList.toggle("stop", running);
+      }
+
+      function setStartupControlMode(mode) {
+        const normalButton = document.getElementById("machine-toggle");
+        const retryButton = document.getElementById("startup-retry");
+        const stopButton = document.getElementById("startup-stop");
+        const failed = mode === "failure";
+
+        normalButton.classList.toggle("hidden", failed);
+        retryButton.classList.toggle("hidden", !failed);
+        stopButton.classList.toggle("hidden", !failed);
+      }
+
+      function toggleMachine() {
+        if (machineRunning) {
+          stopMachine();
+        } else {
+          startMachine();
+        }
+      }
+
+      function retryStartup() {
+        setStartupControlMode("normal");
+        startMachine();
+      }
+
+      function resetMachine() {
+        stopAutoBoardScan();
+        axisMoveInFlight = false;
+        searchMoveInFlight = false;
+        inspectionMode = "search";
+        machineRunning = false;
+        setStartupControlMode("normal");
+        setMachineRunning(false);
+        setMachineStatus("OFF", "idle");
+        appendTerminalLine("[SYSTEM] Startup reset.");
+      }
+
+      function loadBoardSettings() {
+        const saved = JSON.parse(localStorage.getItem("pcb-board-settings") || "{}");
+        document.getElementById("board-width-mm").value =
+          saved.widthMm || DEFAULT_BOARD_WIDTH_MM;
+        document.getElementById("board-height-mm").value =
+          saved.heightMm || DEFAULT_BOARD_HEIGHT_MM;
+        document.getElementById("camera-fov-width-mm").value =
+          saved.fovWidthMm || DEFAULT_CAMERA_FOV_WIDTH_MM;
+        document.getElementById("camera-fov-height-mm").value =
+          saved.fovHeightMm || DEFAULT_CAMERA_FOV_HEIGHT_MM;
+        document.getElementById("board-background-color").value =
+          saved.backgroundColor ||
+          legacyBackgroundColor(saved) ||
+          DEFAULT_BOARD_BACKGROUND_COLOR;
+        autoCaptureFolderName = saved.autoCaptureFolderName || DEFAULT_IMAGE_FOLDER_NAME;
+        ensureImageFolder(autoCaptureFolderName);
+        renderAutoCaptureFolderSelect();
+        updateBoardFovSummary();
+      }
+
+      function readBoardSettings() {
+        const backgroundColor = document.getElementById("board-background-color").value;
+        const backgroundRgb = hexToRgb(backgroundColor);
+        return {
+          widthMm: clampNumberInput("board-width-mm", 10, 500, DEFAULT_BOARD_WIDTH_MM),
+          heightMm: clampNumberInput("board-height-mm", 10, 500, DEFAULT_BOARD_HEIGHT_MM),
+          fovWidthMm: clampNumberInput("camera-fov-width-mm", 10, 500, DEFAULT_CAMERA_FOV_WIDTH_MM),
+          fovHeightMm: clampNumberInput("camera-fov-height-mm", 10, 500, DEFAULT_CAMERA_FOV_HEIGHT_MM),
+          backgroundColor,
+          backgroundR: backgroundRgb.r,
+          backgroundG: backgroundRgb.g,
+          backgroundB: backgroundRgb.b,
+          autoCaptureFolderName
+        };
+      }
+
+      function clampNumberInput(id, min, max, fallback) {
+        const input = document.getElementById(id);
+        const value = Number(input.value);
+
+        if (document.activeElement === input) {
+          if (input.value === "" || input.value === "-" || !Number.isFinite(value)) {
+            return fallback;
+          }
+
+          return value;
+        }
+
+        const clamped = Number.isFinite(value) ? clamp(value, min, max) : fallback;
+        input.value = clamped;
+        return clamped;
+      }
+
+      function autoApplySettings() {
+        const folderSelect = document.getElementById("auto-capture-folder");
+        if (folderSelect) {
+          autoCaptureFolderName = folderSelect.value || DEFAULT_IMAGE_FOLDER_NAME;
+        }
+        persistSettings(false);
+      }
+
+      function persistSettings(writeLog) {
+        const settings = readBoardSettings();
+        localStorage.setItem("pcb-board-settings", JSON.stringify(settings));
+        searchPattern = buildFullAreaSearchPattern();
+        resetSearchState();
+        const bounds = getSearchBounds();
+        updateBoardFovSummary(settings);
+        if (writeLog) {
+          appendTerminalLine(
+            `[SETTINGS] board=${settings.widthMm}x${settings.heightMm}mm fov=${settings.fovWidthMm}x${settings.fovHeightMm}mm color=rgb(${settings.backgroundR},${settings.backgroundG},${settings.backgroundB}) travel=X${bounds.minX.toFixed(0)}..${bounds.maxX.toFixed(0)} Y${bounds.minY.toFixed(0)}..${bounds.maxY.toFixed(0)} targets=${searchPattern.length}`
+          );
+        }
+      }
+
+      function resetSettingsToDefaults() {
+        document.getElementById("board-width-mm").value = DEFAULT_BOARD_WIDTH_MM;
+        document.getElementById("board-height-mm").value = DEFAULT_BOARD_HEIGHT_MM;
+        document.getElementById("camera-fov-width-mm").value = DEFAULT_CAMERA_FOV_WIDTH_MM;
+        document.getElementById("camera-fov-height-mm").value = DEFAULT_CAMERA_FOV_HEIGHT_MM;
+        document.getElementById("board-background-color").value = DEFAULT_BOARD_BACKGROUND_COLOR;
+        autoCaptureFolderName = DEFAULT_IMAGE_FOLDER_NAME;
+        renderAutoCaptureFolderSelect();
+        persistSettings(true);
+      }
+
+      function updateBoardFovSummary(settings = readBoardSettings()) {
+        const capturePlan = buildBoardCapturePlan(settings);
+        document.getElementById("board-fov-summary").innerHTML =
+          `<span>BOARD: ${settings.widthMm} x ${settings.heightMm} mm</span>` +
+          `<span>FOV: ${settings.fovWidthMm} x ${settings.fovHeightMm} mm</span>` +
+          `<span>IPB: ${capturePlan.imagesPerBoard}</span>` +
+          `<span>FOLDER: ${escapeHtml(settings.autoCaptureFolderName)}</span>`;
+      }
+
+      function calculateImagesPerBoard(settings) {
+        return buildBoardCapturePlan(settings).imagesPerBoard;
+      }
+
+      function buildBoardCapturePlan(settings = readBoardSettings(), origin = "center") {
+        const columns = imageCountForDimension(settings.widthMm, settings.fovWidthMm);
+        const rows = imageCountForDimension(settings.heightMm, settings.fovHeightMm);
+        const xPositions = axisPositionsForDimension(
+          settings.widthMm,
+          settings.fovWidthMm,
+          columns,
+          origin
+        );
+        const yPositions = axisPositionsForDimension(
+          settings.heightMm,
+          settings.fovHeightMm,
+          rows,
+          origin
+        );
+        const positions = [];
+
+        // Serpentine order keeps the axis from jumping back to the left side
+        // after every row. The scan starts from the upper-left work area and
+        // ends wherever the last tile is, then the caller can return to zero.
+        for (let row = 0; row < rows; row += 1) {
+          const orderedXPositions = row % 2 === 0
+            ? xPositions
+            : [...xPositions].reverse();
+
+          for (let column = 0; column < orderedXPositions.length; column += 1) {
+            positions.push({
+              imageNumber: positions.length + 1,
+              xMm: orderedXPositions[column],
+              yMm: yPositions[row],
+              row: row + 1,
+              column: row % 2 === 0
+                ? column + 1
+                : orderedXPositions.length - column
+            });
+          }
+        }
+
+        return {
+          columns,
+          rows,
+          imagesPerBoard: positions.length,
+          requiresAxisTravel: positions.length > 1,
+          positions
+        };
+      }
+
+      function imageCountForDimension(boardMm, fovMm) {
+        if (boardMm <= fovMm) {
+          return 1;
+        }
+
+        // Use a fixed overlap so adjacent images do not miss defects near tile
+        // edges. The operator asked for 15 mm because the second tile was just
+        // barely missing the board edge during testing.
+        const usableStepMm = Math.max(1, fovMm - CAPTURE_OVERLAP_MM);
+        return Math.max(2, Math.ceil((boardMm - fovMm) / usableStepMm) + 1);
+      }
+
+      function axisPositionsForDimension(boardMm, fovMm, count, origin = "center") {
+        if (count <= 1) {
+          return [0];
+        }
+
+        const stepMm = Math.max(1, fovMm - CAPTURE_OVERLAP_MM);
+        const totalTravelMm = stepMm * (count - 1);
+        const startMm = origin === "corner" ? 0 : -totalTravelMm / 2;
+        const positions = [];
+
+        for (let index = 0; index < count; index += 1) {
+          positions.push(Number((startMm + stepMm * index).toFixed(3)));
+        }
+
+        return positions;
+      }
+
+      function legacyBackgroundColor(saved) {
+        if (
+          Number.isFinite(saved.backgroundR) &&
+          Number.isFinite(saved.backgroundG) &&
+          Number.isFinite(saved.backgroundB)
+        ) {
+          return rgbToHex(saved.backgroundR, saved.backgroundG, saved.backgroundB);
+        }
+
+        return null;
+      }
+
+      function hexToRgb(hex) {
+        const value = hex.replace("#", "");
+        return {
+          r: parseInt(value.slice(0, 2), 16),
+          g: parseInt(value.slice(2, 4), 16),
+          b: parseInt(value.slice(4, 6), 16)
+        };
+      }
+
+      function rgbToHex(red, green, blue) {
+        return `#${componentToHex(red)}${componentToHex(green)}${componentToHex(blue)}`;
+      }
+
+      function componentToHex(value) {
+        return Math.round(value).toString(16).padStart(2, "0");
+      }
+
+      function sampleBoardColorFromClick(event) {
+        event.preventDefault();
+        if (event.button !== 2 || event.target.closest("#settings-overlay")) {
+          return;
+        }
+
+        const video = document.getElementById("webcam-preview");
+        if (!video.videoWidth || !video.videoHeight) {
+          appendTerminalLine("[COLOR] Cannot sample. Camera frame is not ready.");
+          return;
+        }
+
+        const videoPoint = mouseEventToVideoPixel(event, video);
+        if (!videoPoint) {
+          appendTerminalLine("[COLOR] Click was outside the active camera image.");
+          return;
+        }
+
+        const sampleCanvas = document.createElement("canvas");
+        sampleCanvas.width = 1;
+        sampleCanvas.height = 1;
+        const sampleContext = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        sampleContext.drawImage(
+          video,
+          videoPoint.x,
+          videoPoint.y,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1
+        );
+
+        const pixel = sampleContext.getImageData(0, 0, 1, 1).data;
+        const red = pixel[0];
+        const green = pixel[1];
+        const blue = pixel[2];
+        document.getElementById("board-background-color").value = rgbToHex(red, green, blue);
+        persistSettings(false);
+        appendTerminalLine(`[COLOR] board color sampled rgb(${red},${green},${blue})`);
+      }
+
+      function mouseEventToVideoPixel(event, video) {
+        const rect = video.getBoundingClientRect();
+        const videoAspect = video.videoWidth / video.videoHeight;
+        const viewAspect = rect.width / rect.height;
+        let displayedWidth = rect.width;
+        let displayedHeight = rect.height;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (viewAspect > videoAspect) {
+          displayedWidth = rect.height * videoAspect;
+          offsetX = (rect.width - displayedWidth) / 2;
+        } else {
+          displayedHeight = rect.width / videoAspect;
+          offsetY = (rect.height - displayedHeight) / 2;
+        }
+
+        const localX = event.clientX - rect.left - offsetX;
+        const localY = event.clientY - rect.top - offsetY;
+        if (localX < 0 || localY < 0 || localX > displayedWidth || localY > displayedHeight) {
+          return null;
+        }
+
+        return {
+          x: Math.min(video.videoWidth - 1, Math.max(0, Math.round(localX / displayedWidth * video.videoWidth))),
+          y: Math.min(video.videoHeight - 1, Math.max(0, Math.round(localY / displayedHeight * video.videoHeight)))
+        };
+      }
+
+      function openSettings() {
+        document.getElementById("settings-overlay").classList.add("active");
+      }
+
+      function closeSettings() {
+        document.getElementById("settings-overlay").classList.remove("active");
+      }
+
+      function openImageLog() {
+        imageLogView = "folders";
+        renderImageLogView();
+        document.getElementById("image-log-overlay").classList.add("active");
+      }
+
+      function renderImageLogView() {
+        renderImageFolders();
+        renderImageLog();
+        renderImageLogPath();
+      }
+
+      function closeImageLog() {
+        document.getElementById("image-log-overlay").classList.remove("active");
+      }
+
+      function showImageFolderRoot() {
+        imageLogView = "folders";
+        renderImageLogView();
+      }
+
+      function nextCaptureName() {
+        const settings = readBoardSettings();
+        const imagesPerBoard = calculateImagesPerBoard(settings);
+        const boardNumber = nextBoardNumber;
+
+        if (imagesPerBoard <= 1) {
+          nextBoardNumber += 1;
+          nextImageNumberForBoard = 1;
+          return String(boardNumber);
+        }
+
+        const imageNumber = nextImageNumberForBoard;
+        nextImageNumberForBoard += 1;
+        if (nextImageNumberForBoard > imagesPerBoard) {
+          nextBoardNumber += 1;
+          nextImageNumberForBoard = 1;
+        }
+
+        return `${boardNumber}.${imageNumber}`;
+      }
+
+      function addImageToLog(blob, imageName, folderName = activeImageFolderName) {
+        const url = URL.createObjectURL(blob);
+        const entry = {
+          name: imageName,
+          url,
+          capturedAt: new Date().toLocaleTimeString()
+        };
+        getImageFolder(folderName).entries.unshift(entry);
+        renderImageLogView();
+        return entry;
+      }
+
+      function getActiveImageFolder() {
+        let folder = getImageFolder(activeImageFolderName);
+        activeImageFolderName = folder.name;
+        return folder;
+      }
+
+      function getImageFolder(folderName) {
+        let folder = imageFolders.find((candidate) => candidate.name === folderName);
+        if (!folder) {
+          folder = ensureImageFolder(folderName);
+        }
+
+        return folder;
+      }
+
+      function ensureImageFolder(folderName) {
+        let folder = imageFolders.find((candidate) => candidate.name === folderName);
+        if (!folder) {
+          folder = {
+            name: folderName,
+            entries: []
+          };
+          imageFolders.push(folder);
+        }
+
+        return folder;
+      }
+
+      function renderAutoCaptureFolderSelect() {
+        const select = document.getElementById("auto-capture-folder");
+        if (!select) {
+          return;
+        }
+
+        select.innerHTML = imageFolders.map((folder) => (
+          `<option value="${escapeHtml(folder.name)}">${escapeHtml(folder.name)}</option>`
+        )).join("");
+        if (!imageFolders.some((folder) => folder.name === autoCaptureFolderName)) {
+          autoCaptureFolderName = DEFAULT_IMAGE_FOLDER_NAME;
+        }
+        select.value = autoCaptureFolderName;
+      }
+
+      function renderImageFolders() {
+        const grid = document.getElementById("image-folder-grid");
+        if (!grid) {
+          return;
+        }
+
+        if (imageLogView !== "folders") {
+          grid.classList.add("hidden");
+          return;
+        }
+
+        grid.classList.remove("hidden");
+        grid.innerHTML = imageFolders.map((folder) => `
+          <button class="folder-tile" type="button" onclick="selectImageFolder('${escapeJs(folder.name)}')">
+            <div class="folder-icon"></div>
+            <div>${escapeHtml(folder.name)}</div>
+            <div class="folder-count">${folder.entries.length} images</div>
+          </button>
+        `).join("") + `
+          <button class="folder-tile" type="button" onclick="addImageFolder()" aria-label="Add folder">
+            <div class="folder-plus">+</div>
+          </button>
+        `;
+      }
+
+      function selectImageFolder(folderName) {
+        activeImageFolderName = folderName;
+        imageLogView = "folder";
+        renderImageLogView();
+      }
+
+      function addImageFolder() {
+        const folderName = window.prompt("Folder name");
+        if (!folderName) {
+          return;
+        }
+
+        const cleanName = folderName.trim();
+        if (!cleanName) {
+          return;
+        }
+
+        if (!imageFolders.some((folder) => folder.name.toLowerCase() === cleanName.toLowerCase())) {
+          imageFolders.push({
+            name: cleanName,
+            entries: []
+          });
+        }
+
+        activeImageFolderName = cleanName;
+        autoCaptureFolderName = cleanName;
+        renderAutoCaptureFolderSelect();
+        persistSettings(false);
+        imageLogView = "folder";
+        renderImageLogView();
+        appendTerminalLine(`[IMAGE LOG] Active folder: ${cleanName}`);
+      }
+
+      function renderImageLog() {
+        const grid = document.getElementById("image-log-grid");
+        if (!grid) {
+          return;
+        }
+
+        if (imageLogView !== "folder") {
+          grid.classList.add("hidden");
+          return;
+        }
+
+        grid.classList.remove("hidden");
+        const folder = getActiveImageFolder();
+        if (folder.entries.length === 0) {
+          grid.innerHTML = `<div class="empty-log">No Images In ${escapeHtml(folder.name)}</div>`;
+          return;
+        }
+
+        grid.innerHTML = folder.entries.map((entry) => `
+          <article class="image-log-card">
+            <button class="image-open-button" type="button" onclick="openImagePreview('${escapeJs(entry.name)}')">
+              <img src="${entry.url}" alt="Board image ${entry.name}">
+            </button>
+            <div class="image-log-name">Image ${entry.name}</div>
+            <div class="image-log-meta">${escapeHtml(folder.name)} | ${entry.capturedAt}</div>
+            <button class="image-delete" type="button" onclick="deleteImageFromLog('${escapeJs(entry.name)}')">Delete</button>
+          </article>
+        `).join("");
+      }
+
+      function openImagePreview(imageName) {
+        const folder = getActiveImageFolder();
+        const entry = folder.entries.find((candidate) => candidate.name === imageName);
+        if (!entry) {
+          return;
+        }
+
+        document.getElementById("image-preview-title").textContent = `Image ${entry.name}`;
+        document.getElementById("image-preview-img").src = entry.url;
+        document.getElementById("image-preview").classList.add("active");
+      }
+
+      function closeImagePreview() {
+        document.getElementById("image-preview").classList.remove("active");
+      }
+
+      function deleteImageFromLog(imageName) {
+        const folder = getActiveImageFolder();
+        const index = folder.entries.findIndex((candidate) => candidate.name === imageName);
+        if (index < 0) {
+          return;
+        }
+
+        const [entry] = folder.entries.splice(index, 1);
+        URL.revokeObjectURL(entry.url);
+        closeImagePreview();
+        renderImageLogView();
+        appendTerminalLine(`[IMAGE LOG] Deleted image ${imageName} from ${folder.name}.`);
+      }
+
+      function renderImageLogPath() {
+        const path = document.getElementById("image-log-path");
+        const label = document.getElementById("image-log-path-label");
+        if (!path || !label) {
+          return;
+        }
+
+        if (imageLogView !== "folder") {
+          path.classList.remove("active");
+          return;
+        }
+
+        label.textContent = `Image Log / ${activeImageFolderName}`;
+        path.classList.add("active");
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function escapeJs(value) {
+        return String(value)
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'");
+      }
+
+      function getSearchBounds() {
+        const settings = readBoardSettings();
+        const halfTravelX = Math.max(0, (settings.widthMm - settings.fovWidthMm) / 2);
+        const halfTravelY = Math.max(0, (settings.heightMm - settings.fovHeightMm) / 2);
+
+        return {
+          minX: clamp(-halfTravelX, AXIS_ABSOLUTE_MIN_X_MM, AXIS_ABSOLUTE_MAX_X_MM),
+          maxX: clamp(halfTravelX, AXIS_ABSOLUTE_MIN_X_MM, AXIS_ABSOLUTE_MAX_X_MM),
+          minY: clamp(-halfTravelY, AXIS_ABSOLUTE_MIN_Y_MM, AXIS_ABSOLUTE_MAX_Y_MM),
+          maxY: clamp(halfTravelY, AXIS_ABSOLUTE_MIN_Y_MM, AXIS_ABSOLUTE_MAX_Y_MM),
+          widthMm: settings.widthMm,
+          heightMm: settings.heightMm,
+          fovWidthMm: settings.fovWidthMm,
+          fovHeightMm: settings.fovHeightMm,
+          requiresAxisTravel: halfTravelX > 0 || halfTravelY > 0
+        };
+      }
+
+      async function startMachine() {
+        setMachineRunning(true);
+        setMachineStatus("CHECKING AXIS", "searching");
+        appendTerminalLine("[SYSTEM] Auto mode starting. Calibrating camera view.");
+
+        const axisReady = await ensureAxisConnectedForStart();
+        if (!axisReady) {
+          machineRunning = false;
+          setStartupControlMode("failure");
+          setMachineStatus("2D AXIS NOT CONNECTED", "error");
+          appendTerminalLine("[ERROR] 2D axis not connected. Start aborted.");
+          return;
+        }
+
+        setMachineStatus("2D AXIS CONNECTED", "running");
+        await wait(350);
+
+        setMachineStatus("SETTING AXIS ZERO", "searching");
+        const zeroReady = await setAxisZero();
+        if (!zeroReady) {
+          machineRunning = false;
+          setStartupControlMode("failure");
+          setMachineStatus("AXIS ZERO FAILED", "error");
+          appendTerminalLine("[ERROR] Could not set current camera position to X0 Y0. Start aborted.");
+          return;
+        }
+
+        await wait(350);
+
+        const cameraReady = await ensureCameraConnectedForStart();
+        if (!cameraReady) {
+          machineRunning = false;
+          setStartupControlMode("failure");
+          setMachineStatus("CAMERA NOT CONNECTED", "error");
+          appendTerminalLine("[ERROR] Camera not connected. Start aborted.");
+          return;
+        }
+
+        setMachineStatus("CAMERA CONNECTED", "running");
+        await wait(350);
+
+        setMachineStatus("CALIBRATING", "searching");
+        await initializeFullAreaSearch();
+        window.setTimeout(() => {
+          setMachineStatus("SEARCHING FOR BOARD", "searching");
+          startAutoBoardScan();
+        }, 500);
+      }
+
+      function stopMachine() {
+        setMachineRunning(false);
+        setMachineStatus("SHUTTING DOWN", "searching");
+        stopAutoBoardScan();
+        axisMoveInFlight = false;
+        searchMoveInFlight = false;
+        inspectionMode = "search";
+        stopAxis();
+        appendTerminalLine("[SYSTEM] Stop requested. Motion/scanning halted.");
+        window.setTimeout(() => {
+          setMachineStatus("OFF", "idle");
+          appendTerminalLine("[SYSTEM] Auto mode stopped.");
+        }, 900);
+      }
+
+      function appendTerminalLine(line) {
+        const terminal = document.getElementById("terminal-log");
+        terminal.textContent = `${terminal.textContent.trimEnd()}\n${line}`;
+        terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      async function stopExistingPreview(video) {
+        // Explicitly stop old tracks before reconnecting so Chromium does not
+        // keep the USB inspection camera locked after a UI refresh.
+        if (!video.srcObject) {
+          return;
+        }
+
+        for (const track of video.srcObject.getTracks()) {
+          track.stop();
+        }
+        video.srcObject = null;
+      }
+
+      async function connectAxis() {
+        try {
+          const response = await fetch(`${AXIS_BRIDGE_URL}/axis/status`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const payload = await response.json();
+          axisBridgeConnected = true;
+          const position = updateAxisPositionFromStatus(payload.status);
+          appendTerminalLine(
+            `[AXIS] Bridge connected. ${formatAxisPositionForLog(payload.status, position)}`
+          );
+        } catch (error) {
+          axisBridgeConnected = false;
+          appendTerminalLine(
+            `[ERROR] Axis bridge unavailable. Check Jetson service: sudo systemctl status pcb-axis-bridge.service`
+          );
+        }
+      }
+
+      async function ensureAxisConnectedForStart() {
+        if (axisBridgeConnected) {
+          return true;
+        }
+
+        await connectAxis();
+        return axisBridgeConnected;
+      }
+
+      async function ensureCameraConnectedForStart() {
+        if (!cameraConnected) {
+          await openPreviewCamera();
+          await wait(300);
+        }
+
+        const video = document.getElementById("webcam-preview");
+        if (!video.srcObject || !video.videoWidth || !video.videoHeight) {
+          cameraConnected = false;
+          return false;
+        }
+
+        const tracks = video.srcObject.getVideoTracks();
+        if (tracks.length === 0) {
+          cameraConnected = false;
+          return false;
+        }
+
+        const liveTrack = tracks.find((track) => track.readyState === "live" && !track.muted);
+        if (!liveTrack) {
+          cameraConnected = false;
+          return false;
+        }
+
+        cameraConnected = true;
+        return true;
+      }
+
+      async function autoConnectAxis() {
+        await connectAxis();
+      }
+
+      async function postAxis(path, body = {}) {
+        const response = await fetch(`${AXIS_BRIDGE_URL}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.json();
+      }
+
+      async function testAxisMove() {
+        if (!axisBridgeConnected) {
+          await connectAxis();
+        }
+
+        if (!axisBridgeConnected) {
+          return;
+        }
+
+        try {
+          const payload = await postAxis("/axis/test");
+          appendTerminalLine(`[AXIS] Test complete. ${JSON.stringify(payload.responses)}`);
+        } catch (error) {
+          axisBridgeConnected = false;
+          appendTerminalLine(`[ERROR] Axis test failed: ${error.message}`);
+        }
+      }
+
+      async function stopAxis() {
+        if (!axisBridgeConnected) {
+          return;
+        }
+
+        try {
+          const payload = await postAxis("/axis/stop");
+          appendTerminalLine(`[AXIS] stop requested. ${payload.status || ""}`);
+        } catch (error) {
+          appendTerminalLine(`[ERROR] Axis stop failed: ${error.message}`);
+        }
+      }
+
+      async function setAxisZero() {
+        if (!axisBridgeConnected) {
+          await connectAxis();
+        }
+
+        if (!axisBridgeConnected) {
+          return false;
+        }
+
+        try {
+          const payload = await postAxis("/axis/set-zero");
+          searchStartXmm = 0;
+          searchStartYmm = 0;
+          searchXmm = 0;
+          searchYmm = 0;
+          searchPattern = buildFullAreaSearchPattern();
+          resetSearchState();
+          appendTerminalLine("[AXIS] Set current position to X0 Y0.");
+          const afterStatus = payload.lines.find((line) => line.startsWith("after="));
+          const position = afterStatus ? parseMachinePosition(afterStatus) : { x: 0, y: 0, z: 0 };
+          appendTerminalLine(
+            `[AXIS] Work position now X=${position.x.toFixed(3)} Y=${position.y.toFixed(3)}. Raw status: ${payload.lines.join(" | ")}`
+          );
+          return true;
+        } catch (error) {
+          appendTerminalLine(`[ERROR] Set zero failed: ${error.message}`);
+          return false;
+        }
+      }
+
+      function wait(milliseconds) {
+        return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+      }
+
+      function cameraLooksLikeElp(device) {
+        // Browser device labels are only available after the page has camera
+        // permission. Only the inspection camera counts here. The laptop
+        // webcam must never satisfy the machine camera failsafe.
+        const label = device.label.toLowerCase();
+        return (
+          label.includes("elp") ||
+          label.includes("48mp") ||
+          label.includes("48 mp") ||
+          label.includes("32e4:4802")
+        );
+      }
+
+      async function getPreferredCameraDeviceId() {
+        // First ask for temporary access. Without this, Chrome/Edge hide camera
+        // names and every device label comes back blank.
+        const permissionStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+
+        for (const track of permissionStream.getTracks()) {
+          track.stop();
+        }
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((device) => device.kind === "videoinput");
+
+        // No fallback. If the ELP/48MP inspection camera is not present, the
+        // camera failsafe must fail instead of accepting the laptop webcam.
+        const inspectionCamera = videoDevices.find(cameraLooksLikeElp);
+        return inspectionCamera ? inspectionCamera.deviceId : null;
+      }
+
+      async function openPreviewCamera() {
+        const video = document.getElementById("webcam-preview");
+        const message = document.getElementById("camera-message");
+        const meta = document.getElementById("camera-meta");
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          cameraConnected = false;
+          message.textContent = "Browser camera access is unavailable";
+          message.style.display = "grid";
+          meta.textContent = "Camera not connected";
+          return;
+        }
+
+        try {
+          await stopExistingPreview(video);
+          const deviceId = await getPreferredCameraDeviceId();
+          if (!deviceId) {
+            cameraConnected = false;
+            message.textContent = "No USB camera found";
+            message.style.display = "grid";
+            meta.textContent = "Camera not connected";
+            return;
+          }
+
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              deviceId: { exact: deviceId },
+              width: { ideal: 8000 },
+              height: { ideal: 6000 },
+              frameRate: { ideal: 60 },
+              facingMode: { ideal: "environment" }
+            },
+            audio: false
+          });
+          video.srcObject = stream;
+
+          const [track] = stream.getVideoTracks();
+          track.addEventListener("ended", () => {
+            cameraConnected = false;
+            setMachineStatus("CAMERA NOT CONNECTED", "error");
+            meta.textContent = "Camera not connected";
+            message.textContent = "Camera disconnected";
+            message.style.display = "grid";
+            appendTerminalLine("[ERROR] Camera stream ended.");
+          });
+          track.addEventListener("mute", () => {
+            cameraConnected = false;
+            meta.textContent = "Camera signal unavailable";
+            message.textContent = "Camera signal unavailable";
+            message.style.display = "grid";
+            appendTerminalLine("[ERROR] Camera signal muted or unavailable.");
+          });
+          track.addEventListener("unmute", () => {
+            cameraConnected = true;
+            message.style.display = "none";
+          });
+          const settings = track.getSettings();
+          const label = track.label || "ELP USB Camera";
+          const width = settings.width || "?";
+          const height = settings.height || "?";
+          meta.textContent = `${label} | ${width} x ${height}`;
+          cameraConnected = true;
+          message.style.display = "none";
+        } catch (error) {
+          cameraConnected = false;
+          message.textContent = "Camera blocked or unavailable. Allow camera access and close other camera apps.";
+          message.style.display = "grid";
+          meta.textContent = "Camera not connected";
+        }
+      }
+
+      function downloadBlob(blob, filename) {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      }
+
+      function timestampForFilename() {
+        return new Date().toISOString().replace(/[:.]/g, "-");
+      }
+
+      async function captureStillBlob() {
+        const video = document.getElementById("webcam-preview");
+        const message = document.getElementById("camera-message");
+
+        if (!video.srcObject) {
+          message.style.display = "grid";
+          message.textContent = "Camera is not open";
+          return null;
+        }
+
+        const [track] = video.srcObject.getVideoTracks();
+
+        // `ImageCapture.takePhoto()` can access true still-image modes on some
+        // UVC cameras. This is the best browser-side chance of getting the
+        // ELP camera's full still resolution instead of only the video stream.
+        if ("ImageCapture" in window) {
+          try {
+            const imageCapture = new ImageCapture(track);
+            const capabilities = await imageCapture.getPhotoCapabilities();
+            const photoSettings = {};
+
+            if (capabilities.imageWidth) {
+              photoSettings.imageWidth = capabilities.imageWidth.max;
+            }
+
+            if (capabilities.imageHeight) {
+              photoSettings.imageHeight = capabilities.imageHeight.max;
+            }
+
+            const blob = await imageCapture.takePhoto(photoSettings);
+            return blob;
+          } catch (error) {
+            // Fall through to canvas capture when the browser or camera driver
+            // rejects still-photo mode.
+          }
+        }
+
+        // Fallback: save the current video frame. This will only be as large as
+        // the active browser video stream, not necessarily the full 48 MP sensor.
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext("2d");
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return new Promise((resolve) => {
+          canvas.toBlob((blob) => resolve(blob), "image/jpeg", 1.0);
+        });
+      }
+
+      async function captureStillImage() {
+        const blob = await captureStillBlob();
+        if (!blob) {
+          return;
+        }
+
+        const imageName = nextCaptureName();
+        addImageToLog(blob, imageName, DEFAULT_IMAGE_FOLDER_NAME);
+        appendTerminalLine(`[CAPTURE] Image ${imageName} saved to ${DEFAULT_IMAGE_FOLDER_NAME}.`);
+      }
+
+      async function captureBoardImageSet(options = {}) {
+        const requireMachineRunning = options.requireMachineRunning !== false;
+        const logPrefix = options.logPrefix || "CAPTURE";
+        const alignFromCamera = options.alignFromCamera === true;
+        const settings = readBoardSettings();
+        const initialCapturePlan = buildBoardCapturePlan(settings, "center");
+        const capturePlan = alignFromCamera && initialCapturePlan.requiresAxisTravel
+          ? buildBoardCapturePlan(settings, "corner")
+          : initialCapturePlan;
+
+        if (!axisBridgeConnected && capturePlan.requiresAxisTravel) {
+          appendTerminalLine("[ERROR] Cannot run multi-image board capture. 2D axis is not connected.");
+          return;
+        }
+
+        setMachineStatus("CAPTURING", "running");
+        appendTerminalLine(
+          `[${logPrefix} PLAN] board=${settings.widthMm}x${settings.heightMm}mm fov=${settings.fovWidthMm}x${settings.fovHeightMm}mm overlap=${CAPTURE_OVERLAP_MM}mm tiles=${capturePlan.columns}x${capturePlan.rows} images=${capturePlan.imagesPerBoard}`
+        );
+
+        let previousCaptureTarget = null;
+        if (alignFromCamera && capturePlan.requiresAxisTravel) {
+          const alignedOrigin = await alignCameraToVisibleBoardCorner(logPrefix);
+          if (!alignedOrigin) {
+            setMachineStatus("CORNER ALIGN FAILED", "error");
+            return;
+          }
+        }
+
+        for (const target of capturePlan.positions) {
+          if (requireMachineRunning && !machineRunning) {
+            appendTerminalLine(`[${logPrefix} PLAN] stopped before capture sequence completed.`);
+            return;
+          }
+
+          if (capturePlan.requiresAxisTravel) {
+            if (alignFromCamera) {
+              await moveToNextRelativeCapturePosition(previousCaptureTarget, target);
+            } else {
+              await moveAxisToCaptureTarget(target);
+            }
+          }
+
+          const preCaptureSettleMs = target.imageNumber === 2
+            ? CAPTURE_SECOND_IMAGE_PRE_SETTLE_MS
+            : CAPTURE_PRE_IMAGE_SETTLE_MS;
+          await wait(preCaptureSettleMs);
+
+          const blob = await captureStillBlob();
+          if (!blob) {
+            appendTerminalLine(`[ERROR] Capture failed at image ${target.imageNumber}.`);
+            setMachineStatus("ERROR", "error");
+            return;
+          }
+
+          const imageName = capturePlan.imagesPerBoard <= 1
+            ? String(nextBoardNumber)
+            : `${nextBoardNumber}.${target.imageNumber}`;
+          addImageToLog(blob, imageName, autoCaptureFolderName);
+          appendTerminalLine(
+            `[${logPrefix}] board ${nextBoardNumber} image ${target.imageNumber}/${capturePlan.imagesPerBoard} dX=${target.xMm.toFixed(1)} dY=${target.yMm.toFixed(1)}`
+          );
+          previousCaptureTarget = target;
+          await wait(CAPTURE_POST_IMAGE_SETTLE_MS);
+        }
+
+        nextBoardNumber += 1;
+        nextImageNumberForBoard = 1;
+
+        if (capturePlan.requiresAxisTravel) {
+          await moveAxisToCaptureTarget({ xMm: 0, yMm: 0, imageNumber: 0 });
+        }
+
+        setMachineStatus("BOARD CAPTURED", "running");
+      }
+
+      async function testCapturePositions() {
+        if (!axisBridgeConnected) {
+          await connectAxis();
+        }
+
+        if (!axisBridgeConnected) {
+          appendTerminalLine("[ERROR] Cannot test scan. 2D axis is not connected.");
+          return;
+        }
+
+        try {
+          setMachineStatus("TEST CAPTURE", "searching");
+          await captureBoardImageSet({
+            requireMachineRunning: false,
+            logPrefix: "TEST CAPTURE",
+            alignFromCamera: true
+          });
+          appendTerminalLine("[TEST CAPTURE] returned to original X0 Y0.");
+          setMachineStatus(machineRunning ? "SEARCHING FOR BOARD" : "OFF", machineRunning ? "searching" : "idle");
+        } catch (error) {
+          appendTerminalLine(`[ERROR] Test capture failed: ${error.message}`);
+          try {
+            await moveAxisToCaptureTarget({ xMm: 0, yMm: 0, imageNumber: 0 });
+            appendTerminalLine("[TEST CAPTURE] returned to X0 Y0 after error.");
+          } catch (returnError) {
+            appendTerminalLine(`[ERROR] Could not return to X0 Y0: ${returnError.message}`);
+          }
+          setMachineStatus("AXIS ERROR", "error");
+        }
+      }
+
+      async function moveToNextRelativeCapturePosition(previousTarget, nextTarget) {
+        // After visual alignment, the current camera position is image 1.
+        // Every later image is just the relative distance from the previous
+        // planned tile. This avoids tying the scan sequence to the original
+        // startup zero; zero is only used for the final return home.
+        if (!previousTarget) {
+          appendTerminalLine("[CAPTURE MOVE] image 1 uses current aligned position.");
+          return;
+        }
+
+        const xMove = (nextTarget.xMm - previousTarget.xMm) * CAPTURE_SCAN_SIGN_X;
+        const yMove = (nextTarget.yMm - previousTarget.yMm) * CAPTURE_SCAN_SIGN_Y;
+
+        appendTerminalLine(
+          `[CAPTURE MOVE] relative X=${xMove.toFixed(1)}mm Y=${yMove.toFixed(1)}mm`
+        );
+
+        await postAxis("/axis/move", {
+          x_mm: xMove,
+          y_mm: yMove,
+          feed_mm_min: SEARCH_FEED_MM_MIN
+        });
+      }
+
+      async function alignCameraToVisibleBoardCorner(logPrefix) {
+        const video = document.getElementById("webcam-preview");
+        if (!video.videoWidth || !video.videoHeight) {
+          appendTerminalLine(`[${logPrefix}] cannot align corner. Camera frame is not ready.`);
+          return null;
+        }
+
+        let bottomAlignSign = CAPTURE_BOTTOM_SIGN_Y;
+        let previousAbsOffset = null;
+
+        for (let step = 1; step <= CAPTURE_CORNER_ALIGN_MAX_STEPS; step += 1) {
+          const board = findGreenBoard(video);
+          if (!board) {
+            appendTerminalLine(`[${logPrefix}] cannot align corner. No board edge is visible.`);
+            return null;
+          }
+
+          const yOffset = visibleBoardBottomOffset(board, video);
+          const absOffset = Math.abs(yOffset);
+
+          if (
+            previousAbsOffset !== null &&
+            absOffset > previousAbsOffset + 0.01
+          ) {
+            bottomAlignSign *= -1;
+            appendTerminalLine(
+              `[${logPrefix}] bottom alignment direction reversed; offset got worse (${previousAbsOffset.toFixed(3)} -> ${absOffset.toFixed(3)})`
+            );
+          }
+
+          if (Math.abs(yOffset) <= CAPTURE_CORNER_ALIGN_DEADBAND) {
+            const position = await readAxisWorkPosition();
+            appendTerminalLine(
+              `[${logPrefix}] bottom edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
+            );
+            return position;
+          }
+
+          const yMove = cornerCorrectionMoveFromOffset(yOffset, bottomAlignSign);
+          appendTerminalLine(
+            `[${logPrefix}] bottom align ${step}/${CAPTURE_CORNER_ALIGN_MAX_STEPS} bottomOffset=${yOffset.toFixed(3)} moveY=${yMove.toFixed(2)}mm`
+          );
+          await postAxis("/axis/move", {
+            x_mm: 0,
+            y_mm: yMove,
+            feed_mm_min: CAPTURE_CORNER_FEED_MM_MIN
+          });
+          await wait(CAPTURE_CORNER_SETTLE_MS);
+          previousAbsOffset = absOffset;
+        }
+
+        appendTerminalLine(`[${logPrefix}] bottom alignment failed. Board bottom never reached target.`);
+        return null;
+      }
+
+      function visibleBoardBottomOffset(board, video) {
+        const boardBottom = board.y + board.height;
+        const targetBottom = video.videoHeight * (1 - CAPTURE_BOTTOM_MARGIN_RATIO);
+        return (boardBottom - targetBottom) / video.videoHeight;
+      }
+
+      async function readAxisWorkPosition() {
+        const response = await fetch(`${AXIS_BRIDGE_URL}/axis/status`);
+        if (!response.ok) {
+          throw new Error(`axis status HTTP ${response.status}`);
+        }
+
+        const payload = await response.json();
+        const position = parseMachinePosition(payload.status);
+        if (!position) {
+          throw new Error(`could not parse axis position: ${payload.status}`);
+        }
+
+        return position;
+      }
+
+      async function moveAxisToCaptureTarget(target) {
+        await postAxis("/axis/move-absolute", {
+          x_mm: target.xMm,
+          y_mm: target.yMm,
+          feed_mm_min: SEARCH_FEED_MM_MIN
+        });
+      }
+
+      function startAutoBoardScan() {
+        if (autoScanTimer !== null) {
+          return;
+        }
+
+        stableBoardFrames = 0;
+        missingBoardFrames = 0;
+        boardPresenceFrames = 0;
+        boardInRange = false;
+        pendingBoardBox = null;
+        boardWorkflowInProgress = false;
+        lastBoardBox = null;
+        capturedCurrentBoard = false;
+        smoothedAxisOffsetX = 0;
+        smoothedAxisOffsetY = 0;
+        inspectionMode = "search";
+        autoScanTimer = window.setInterval(scanForBoard, AUTO_SCAN_INTERVAL_MS);
+      }
+
+      function stopAutoBoardScan() {
+        if (autoScanTimer !== null) {
+          window.clearInterval(autoScanTimer);
+          autoScanTimer = null;
+        }
+
+        clearBoardOverlay();
+        stableBoardFrames = 0;
+        missingBoardFrames = 0;
+        boardPresenceFrames = 0;
+        boardInRange = false;
+        pendingBoardBox = null;
+        boardWorkflowInProgress = false;
+        lastBoardBox = null;
+        capturedCurrentBoard = false;
+        smoothedAxisOffsetX = 0;
+        smoothedAxisOffsetY = 0;
+        inspectionMode = "search";
+        searchMoveInFlight = false;
+      }
+
+      function scanForBoard() {
+        const video = document.getElementById("webcam-preview");
+        if (!video.videoWidth || !video.videoHeight) {
+          return;
+        }
+
+        const board = findGreenBoard(video);
+
+        // This mode is only responsible for detecting that a PCB has entered
+        // the camera view so the conveyor can slow down. It intentionally does
+        // not require the board to be centered, aligned, or ready to capture.
+        if (!board || board.greenPixelRatio < BOARD_PRESENCE_PIXEL_RATIO) {
+          missingBoardFrames += 1;
+          boardPresenceFrames = 0;
+          stableBoardFrames = 0;
+          boardInRange = false;
+          pendingBoardBox = null;
+          boardWorkflowInProgress = false;
+          lastBoardBox = null;
+          clearBoardOverlay();
+
+          if (missingBoardFrames >= BOARD_LEAVE_FRAME_COUNT) {
+            capturedCurrentBoard = false;
+            smoothedAxisOffsetX = 0;
+            smoothedAxisOffsetY = 0;
+            setMachineStatus("WAITING FOR BOARD", "searching");
+          }
+          return;
+        }
+
+        missingBoardFrames = 0;
+        board.presenceOnly = true;
+        const candidateOverlap = pendingBoardBox ? boxOverlapRatio(board, pendingBoardBox) : 0;
+
+        if (!pendingBoardBox || candidateOverlap < BOARD_CANDIDATE_OVERLAP) {
+          pendingBoardBox = board;
+          boardPresenceFrames = 1;
+          clearBoardOverlay();
+          setMachineStatus("VERIFYING BOARD", "searching");
+          return;
+        }
+
+        pendingBoardBox = board;
+        boardPresenceFrames += 1;
+
+        if (boardPresenceFrames < BOARD_PRESENCE_FRAME_COUNT) {
+          const displayBoard = smoothedBoardOverlay(board);
+          drawBoardOverlay(displayBoard, false);
+          setMachineStatus("VERIFYING BOARD", "searching");
+          return;
+        }
+
+        if (!boardInRange) {
+          appendTerminalLine("[BOARD] board edge detected. Conveyor slow-speed signal active.");
+        }
+
+        boardInRange = true;
+        stableBoardFrames = boardPresenceFrames;
+        const displayBoard = smoothedBoardOverlay(board);
+        lastBoardBox = displayBoard;
+        drawBoardOverlay(displayBoard, true);
+        setMachineStatus("BOARD IN RANGE", "running");
+        beginBoardWorkflow(displayBoard);
+      }
+
+      function boxOverlapRatio(firstBox, secondBox) {
+        const left = Math.max(firstBox.x, secondBox.x);
+        const top = Math.max(firstBox.y, secondBox.y);
+        const right = Math.min(firstBox.x + firstBox.width, secondBox.x + secondBox.width);
+        const bottom = Math.min(firstBox.y + firstBox.height, secondBox.y + secondBox.height);
+        const intersectionWidth = Math.max(0, right - left);
+        const intersectionHeight = Math.max(0, bottom - top);
+        const intersectionArea = intersectionWidth * intersectionHeight;
+        const smallerArea = Math.min(
+          firstBox.width * firstBox.height,
+          secondBox.width * secondBox.height
+        );
+
+        if (smallerArea <= 0) {
+          return 0;
+        }
+
+        return intersectionArea / smallerArea;
+      }
+
+      async function beginBoardWorkflow(board) {
+        if (boardWorkflowInProgress || capturedCurrentBoard) {
+          return;
+        }
+
+        const settings = readBoardSettings();
+        const capturePlan = buildBoardCapturePlan(settings);
+        boardWorkflowInProgress = true;
+
+        if (!capturePlan.requiresAxisTravel) {
+          appendTerminalLine("[BOARD] board fits inside FOV. Holding X0 Y0 for single image.");
+          capturedCurrentBoard = true;
+
+          if (AUTO_CAPTURE_ENABLED) {
+            await captureBoardImageSet();
+          } else {
+            setMachineStatus("BOARD READY", "running");
+          }
+
+          boardWorkflowInProgress = false;
+          return;
+        }
+
+        appendTerminalLine(
+          `[BOARD] large board requires ${capturePlan.columns}x${capturePlan.rows} capture plan. Starting camera corner alignment.`
+        );
+        capturedCurrentBoard = true;
+        setMachineStatus("ALIGNING CORNER", "searching");
+
+        await captureBoardImageSet({
+          requireMachineRunning: true,
+          logPrefix: "AUTO CAPTURE",
+          alignFromCamera: true
+        });
+
+        boardWorkflowInProgress = false;
+      }
+
+      function smoothedBoardOverlay(board) {
+        // The color mask can move by a few pixels as lighting changes across
+        // the PCB. Smoothing only the display box keeps the board status quick
+        // while making the top and bottom edges less jumpy.
+        if (!lastBoardBox) {
+          return board;
+        }
+
+        const smoothing = 0.45;
+        return {
+          ...board,
+          x: lastBoardBox.x * smoothing + board.x * (1 - smoothing),
+          y: lastBoardBox.y * smoothing + board.y * (1 - smoothing),
+          width: lastBoardBox.width * smoothing + board.width * (1 - smoothing),
+          height: lastBoardBox.height * smoothing + board.height * (1 - smoothing)
+        };
+      }
+
+      function findGreenBoard(video) {
+        // This commissioning detector looks for the configured PCB substrate
+        // color anywhere in the camera frame. The result is only a board
+        // presence signal, not a defect inspection or component detector.
+        const settings = readBoardSettings();
+        const targetRgb = {
+          red: settings.backgroundR,
+          green: settings.backgroundG,
+          blue: settings.backgroundB
+        };
+        const targetHsl = rgbToHsl(
+          settings.backgroundR,
+          settings.backgroundG,
+          settings.backgroundB
+        );
+        const neutralDarkTarget = targetIsNeutralDarkBoard(targetHsl);
+        const sampleWidth = 320;
+        const sampleHeight = Math.max(1, Math.round(sampleWidth * video.videoHeight / video.videoWidth));
+        const canvas = document.createElement("canvas");
+        canvas.width = sampleWidth;
+        canvas.height = sampleHeight;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.drawImage(video, 0, 0, sampleWidth, sampleHeight);
+        const image = context.getImageData(0, 0, sampleWidth, sampleHeight);
+        const data = image.data;
+        const boxWidth = Math.round(sampleWidth * BOARD_BOX_WIDTH_RATIO);
+        const boxHeight = Math.round(sampleHeight * BOARD_BOX_HEIGHT_RATIO);
+        const boxX = Math.round((sampleWidth - boxWidth) / 2);
+        const boxY = Math.round((sampleHeight - boxHeight) / 2);
+        const boxRight = boxX + boxWidth;
+        const boxBottom = boxY + boxHeight;
+        const boardMask = new Uint8Array(sampleWidth * sampleHeight);
+
+        for (let y = 0; y < sampleHeight; y += 1) {
+          for (let x = 0; x < sampleWidth; x += 1) {
+            const offset = (y * sampleWidth + x) * 4;
+            const red = data[offset];
+            const green = data[offset + 1];
+            const blue = data[offset + 2];
+
+            if (boardPixelMatches(red, green, blue, targetRgb, targetHsl)) {
+              boardMask[y * sampleWidth + x] = 1;
+            }
+          }
+        }
+
+        const boardRegion = largestBoardRegion(
+          boardMask,
+          sampleWidth,
+          sampleHeight,
+          neutralDarkTarget
+        );
+        if (!boardRegion) {
+          return null;
+        }
+
+        const scaleX = video.videoWidth / sampleWidth;
+        const scaleY = video.videoHeight / sampleHeight;
+        const targetPixels = Math.max(1, boxWidth * boxHeight);
+        const trimmedBounds = trimmedBoardRegionBounds(
+          boardRegion,
+          sampleWidth,
+          neutralDarkTarget
+        );
+        const boardWidth = Math.max(1, trimmedBounds.maxX - trimmedBounds.minX + 1);
+        const boardHeight = Math.max(1, trimmedBounds.maxY - trimmedBounds.minY + 1);
+        const x = trimmedBounds.minX * scaleX;
+        const y = trimmedBounds.minY * scaleY;
+        const width = boardWidth * scaleX;
+        const height = boardHeight * scaleY;
+        const greenCenterX = boardRegion.sumX / boardRegion.pixels;
+        const greenCenterY = boardRegion.sumY / boardRegion.pixels;
+        const targetCenterX = boxX + boxWidth / 2;
+        const targetCenterY = boxY + boxHeight / 2;
+        const centerOffsetX = (greenCenterX - targetCenterX) / boxWidth;
+        const centerOffsetY = (greenCenterY - targetCenterY) / boxHeight;
+        const centerDistance = Math.hypot(centerOffsetX, centerOffsetY);
+        const centerScore = Math.max(0, 1 - centerDistance * 3.0);
+        const greenPixelRatio = boardRegion.pixels / (sampleWidth * sampleHeight);
+        const targetMatchingPixels = countRegionPixelsInBox(
+          boardRegion.pixelsInRegion,
+          boxX,
+          boxY,
+          boxRight,
+          boxBottom,
+          sampleWidth
+        );
+        const fillScore = Math.min(1, targetMatchingPixels / (targetPixels * 0.45));
+        const presenceScore = Math.min(1, greenPixelRatio / BOARD_PRESENCE_PIXEL_RATIO);
+        const sizeScore = Math.min(
+          1,
+          Math.min(boardWidth / boxWidth, boxWidth / boardWidth) *
+            Math.min(boardHeight / boxHeight, boxHeight / boardHeight)
+        );
+        const confidence = Math.min(
+          0.99,
+          fillScore * 0.50 + centerScore * 0.35 + sizeScore * 0.15
+        );
+
+        return {
+          x,
+          y,
+          width,
+          height,
+          areaRatio: (width * height) / (video.videoWidth * video.videoHeight),
+          confidence,
+          offsetX: centerOffsetX,
+          offsetY: centerOffsetY,
+          greenCenterX: greenCenterX * scaleX,
+          greenCenterY: greenCenterY * scaleY,
+          greenPixelRatio,
+          presenceScore,
+          fillScore,
+          centerScore,
+          sizeScore
+        };
+      }
+
+      function boardPixelMatches(red, green, blue, targetRgb, targetHsl) {
+        const color = rgbToHsl(red, green, blue);
+        const redDelta = red - targetRgb.red;
+        const greenDelta = green - targetRgb.green;
+        const blueDelta = blue - targetRgb.blue;
+        const rgbDistance = Math.sqrt(
+          redDelta * redDelta +
+            greenDelta * greenDelta +
+            blueDelta * blueDelta
+        );
+
+        // White floors, rails, and glare can have unstable hue values. RGB
+        // distance keeps those broad background areas from being counted as PCB.
+        // Black and charcoal boards are often low-saturation gray under the
+        // camera. Hue is unstable there, so match them with RGB/lightness.
+        const targetIsNeutralDark = targetIsNeutralDarkBoard(targetHsl);
+
+        if (targetIsNeutralDark) {
+          const lightnessMin = Math.max(0, targetHsl.lightness - 0.22);
+          const lightnessMax = Math.min(0.62, targetHsl.lightness + 0.15);
+          return (
+            rgbDistance <= 68 &&
+            color.saturation <= 0.34 &&
+            color.lightness >= lightnessMin &&
+            color.lightness <= lightnessMax &&
+            red < 150 &&
+            green < 150 &&
+            blue < 150
+          );
+        }
+
+        return (
+          rgbDistance <= 110 &&
+          hueDistance(color.hue, targetHsl.hue) <= 42 &&
+          color.saturation >= Math.max(0.10, targetHsl.saturation * 0.38) &&
+          Math.abs(color.lightness - targetHsl.lightness) <= 0.36 &&
+          red < 245 &&
+          green < 245 &&
+          blue < 245
+        );
+      }
+
+      function targetIsNeutralDarkBoard(targetHsl) {
+        return targetHsl.lightness < 0.50 && targetHsl.saturation < 0.18;
+      }
+
+      function largestBoardRegion(mask, width, height, neutralDarkTarget = false) {
+        const visited = new Uint8Array(mask.length);
+        let bestRegion = null;
+        const stack = [];
+
+        for (let startIndex = 0; startIndex < mask.length; startIndex += 1) {
+          if (!mask[startIndex] || visited[startIndex]) {
+            continue;
+          }
+
+          const startX = startIndex % width;
+          const startY = Math.floor(startIndex / width);
+          const region = {
+            pixels: 0,
+            minX: startX,
+            minY: startY,
+            maxX: startX,
+            maxY: startY,
+            sumX: 0,
+            sumY: 0,
+            pixelsInRegion: []
+          };
+
+          stack.length = 0;
+          stack.push(startIndex);
+          visited[startIndex] = 1;
+
+          while (stack.length > 0) {
+            const index = stack.pop();
+            const x = index % width;
+            const y = Math.floor(index / width);
+
+            region.pixels += 1;
+            region.sumX += x;
+            region.sumY += y;
+            region.minX = Math.min(region.minX, x);
+            region.minY = Math.min(region.minY, y);
+            region.maxX = Math.max(region.maxX, x);
+            region.maxY = Math.max(region.maxY, y);
+            region.pixelsInRegion.push(index);
+
+            visitNeighbor(index - 1, x > 0);
+            visitNeighbor(index + 1, x < width - 1);
+            visitNeighbor(index - width, y > 0);
+            visitNeighbor(index + width, y < height - 1);
+          }
+
+          if (
+            regionLooksBoardSized(region, width, height, neutralDarkTarget) &&
+            (!bestRegion || region.pixels > bestRegion.pixels)
+          ) {
+            bestRegion = region;
+          }
+        }
+
+        if (!bestRegion) {
+          return null;
+        }
+
+        const regionRatio = bestRegion.pixels / (width * height);
+        if (regionRatio < BOARD_PRESENCE_PIXEL_RATIO) {
+          return null;
+        }
+
+        return bestRegion;
+
+        function visitNeighbor(index, inBounds) {
+          if (!inBounds || visited[index] || !mask[index]) {
+            return;
+          }
+
+          visited[index] = 1;
+          stack.push(index);
+        }
+      }
+
+      function regionLooksBoardSized(region, frameWidth, frameHeight, neutralDarkTarget) {
+        const regionWidth = region.maxX - region.minX + 1;
+        const regionHeight = region.maxY - region.minY + 1;
+        const widthRatio = regionWidth / frameWidth;
+        const heightRatio = regionHeight / frameHeight;
+        const aspectRatio = regionWidth / Math.max(1, regionHeight);
+
+        // Reject skinny vertical/horizontal machine parts. A PCB edge entering
+        // frame can be partial, but it should still have meaningful width and
+        // height compared with the camera view.
+        if (neutralDarkTarget) {
+          return (
+            widthRatio >= 0.24 &&
+            heightRatio >= 0.16 &&
+            aspectRatio >= 0.70 &&
+            aspectRatio <= 3.2
+          );
+        }
+
+        return (
+          widthRatio >= 0.08 &&
+          heightRatio >= 0.08 &&
+          aspectRatio >= 0.25 &&
+          aspectRatio <= 5.0
+        );
+      }
+
+      function trimmedBoardRegionBounds(region, imageWidth, neutralDarkTarget) {
+        const regionWidth = region.maxX - region.minX + 1;
+        const regionHeight = region.maxY - region.minY + 1;
+        const columnCounts = new Array(regionWidth).fill(0);
+        const rowCounts = new Array(regionHeight).fill(0);
+
+        for (const pixelIndex of region.pixelsInRegion) {
+          const x = pixelIndex % imageWidth;
+          const y = Math.floor(pixelIndex / imageWidth);
+          columnCounts[x - region.minX] += 1;
+          rowCounts[y - region.minY] += 1;
+        }
+
+        const columnDensity = neutralDarkTarget ? 0.26 : 0.18;
+        const rowDensity = neutralDarkTarget ? 0.30 : 0.18;
+        const columnThreshold = Math.max(3, Math.round(regionHeight * columnDensity));
+        const rowThreshold = Math.max(3, Math.round(regionWidth * rowDensity));
+        const minColumn = firstThresholdIndex(columnCounts, columnThreshold);
+        const maxColumn = lastThresholdIndex(columnCounts, columnThreshold);
+        const minRow = firstThresholdIndex(rowCounts, rowThreshold);
+        const maxRow = lastThresholdIndex(rowCounts, rowThreshold);
+
+        if (minColumn === -1 || maxColumn === -1 || minRow === -1 || maxRow === -1) {
+          return {
+            minX: region.minX,
+            minY: region.minY,
+            maxX: region.maxX,
+            maxY: region.maxY
+          };
+        }
+
+        return {
+          minX: region.minX + minColumn,
+          minY: region.minY + minRow,
+          maxX: region.minX + maxColumn,
+          maxY: region.minY + maxRow
+        };
+      }
+
+      function firstThresholdIndex(values, threshold) {
+        for (let index = 0; index < values.length; index += 1) {
+          if (values[index] >= threshold) {
+            return index;
+          }
+        }
+
+        return -1;
+      }
+
+      function lastThresholdIndex(values, threshold) {
+        for (let index = values.length - 1; index >= 0; index -= 1) {
+          if (values[index] >= threshold) {
+            return index;
+          }
+        }
+
+        return -1;
+      }
+
+      function countRegionPixelsInBox(regionPixels, boxX, boxY, boxRight, boxBottom, imageWidth) {
+        let count = 0;
+
+        for (const pixelIndex of regionPixels) {
+          const x = pixelIndex % imageWidth;
+          const y = Math.floor(pixelIndex / imageWidth);
+          if (x >= boxX && x < boxRight && y >= boxY && y < boxBottom) {
+            count += 1;
+          }
+        }
+
+        return count;
+      }
+
+      function rgbToHsl(red, green, blue) {
+        const r = red / 255;
+        const g = green / 255;
+        const b = blue / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const lightness = (max + min) / 2;
+        const delta = max - min;
+
+        if (delta === 0) {
+          return { hue: 0, saturation: 0, lightness };
+        }
+
+        const saturation = delta / (1 - Math.abs(2 * lightness - 1));
+        let hue;
+
+        if (max === r) {
+          hue = 60 * (((g - b) / delta) % 6);
+        } else if (max === g) {
+          hue = 60 * ((b - r) / delta + 2);
+        } else {
+          hue = 60 * ((r - g) / delta + 4);
+        }
+
+        if (hue < 0) {
+          hue += 360;
+        }
+
+        return { hue, saturation, lightness };
+      }
+
+      function hueDistance(firstHue, secondHue) {
+        const distance = Math.abs(firstHue - secondHue);
+        return Math.min(distance, 360 - distance);
+      }
+
+      function fixedInspectionWindow(video) {
+        const width = video.videoWidth * BOARD_BOX_WIDTH_RATIO;
+        const height = video.videoHeight * BOARD_BOX_HEIGHT_RATIO;
+        return {
+          x: (video.videoWidth - width) / 2,
+          y: (video.videoHeight - height) / 2,
+          width,
+          height,
+          areaRatio: (width * height) / (video.videoWidth * video.videoHeight),
+          confidence: 0,
+          offsetX: 0,
+          offsetY: 0,
+          fillScore: 0,
+          centerScore: 0,
+          sizeScore: 0
+        };
+      }
+
+      async function alignAxisToBoard(board, boardIsReady) {
+        if (
+          !AXIS_AUTO_ALIGN_ENABLED ||
+          !axisBridgeConnected ||
+          axisMoveInFlight ||
+          searchMoveInFlight
+        ) {
+          return;
+        }
+
+        if (board.confidence >= AXIS_STOP_ALIGNMENT) {
+          smoothedAxisOffsetX = 0;
+          smoothedAxisOffsetY = 0;
+          appendTerminalLine(
+            `[AXIS] aligned at ${Math.round(board.confidence * 100)}%, holding position`
+          );
+          return;
+        }
+
+        // Move toward visible green anywhere in the frame. Fill inside the
+        // target box is intentionally not used here because a board that is
+        // outside the box should still be pulled toward the box.
+        if (board.greenPixelRatio < AXIS_MIN_GREEN_PIXEL_RATIO) {
+          logAxisHold(`not enough green in frame ${Math.round(board.greenPixelRatio * 100)}%`);
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastAxisMoveTime < currentAxisMoveCooldownMs) {
+          return;
+        }
+
+        smoothedAxisOffsetX =
+          smoothedAxisOffsetX * AXIS_SMOOTHING + board.offsetX * (1 - AXIS_SMOOTHING);
+        smoothedAxisOffsetY =
+          smoothedAxisOffsetY * AXIS_SMOOTHING + board.offsetY * (1 - AXIS_SMOOTHING);
+
+        const needsX = Math.abs(smoothedAxisOffsetX) > AXIS_ALIGN_DEADBAND;
+        const needsY = Math.abs(smoothedAxisOffsetY) > AXIS_ALIGN_DEADBAND;
+        if (!needsX && !needsY) {
+          logAxisHold(
+            `offset inside deadband X=${smoothedAxisOffsetX.toFixed(2)} Y=${smoothedAxisOffsetY.toFixed(2)}`
+          );
+          return;
+        }
+
+        const xMove = needsX
+          ? correctionMoveFromOffset(smoothedAxisOffsetX, AXIS_SIGN_X)
+          : 0;
+        const yMove = needsY
+          ? correctionMoveFromOffset(smoothedAxisOffsetY, AXIS_SIGN_Y)
+          : 0;
+
+        axisMoveInFlight = true;
+        lastAxisMoveTime = now;
+        currentAxisMoveCooldownMs = correctionCooldownFromAlignment(board.confidence);
+
+        try {
+          await postAxis("/axis/move", {
+            x_mm: xMove,
+            y_mm: yMove,
+            feed_mm_min: correctionFeedFromAlignment(board.confidence)
+          });
+          appendTerminalLine(
+            `[AXIS] align move X=${xMove.toFixed(2)}mm Y=${yMove.toFixed(2)}mm offsetX=${smoothedAxisOffsetX.toFixed(2)} offsetY=${smoothedAxisOffsetY.toFixed(2)}`
+          );
+        } catch (error) {
+          axisBridgeConnected = false;
+          appendTerminalLine(`[ERROR] Axis move failed: ${error.message}`);
+        } finally {
+          window.setTimeout(() => {
+            axisMoveInFlight = false;
+          }, currentAxisMoveCooldownMs);
+        }
+      }
+
+      async function runBoardSearchStep() {
+        if (!AXIS_AUTO_ALIGN_ENABLED || !axisBridgeConnected || searchMoveInFlight) {
+          return;
+        }
+
+        const bounds = getSearchBounds();
+        if (!bounds.requiresAxisTravel) {
+          logAxisHold(
+            `board fits FOV ${bounds.widthMm}x${bounds.heightMm}mm <= ${bounds.fovWidthMm}x${bounds.fovHeightMm}mm`
+          );
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastSearchMoveTime < SEARCH_COOLDOWN_MS) {
+          return;
+        }
+
+        if (searchPattern.length === 0) {
+          await initializeFullAreaSearch();
+        }
+
+        if (searchPattern.length === 0) {
+          logAxisHold("search unavailable; axis position unknown");
+          return;
+        }
+
+        const target = searchPattern[searchIndex % searchPattern.length];
+        const targetXmm = target[0];
+        const targetYmm = target[1];
+
+        searchIndex += 1;
+        searchXmm = targetXmm;
+        searchYmm = targetYmm;
+        lastSearchMoveTime = now;
+
+        searchMoveInFlight = true;
+        setMachineStatus("SEARCHING FOR BOARD", "searching");
+
+        try {
+          await postAxis("/axis/move-absolute", {
+            x_mm: targetXmm,
+            y_mm: targetYmm,
+            feed_mm_min: SEARCH_FEED_MM_MIN
+          });
+          appendTerminalLine(
+            `[SEARCH] absolute move X=${targetXmm.toFixed(1)}mm Y=${targetYmm.toFixed(1)}mm`
+          );
+        } catch (error) {
+          axisBridgeConnected = false;
+          appendTerminalLine(`[ERROR] Search move failed: ${error.message}`);
+        } finally {
+          window.setTimeout(() => {
+            searchMoveInFlight = false;
+          }, SEARCH_COOLDOWN_MS);
+        }
+      }
+
+      function resetSearchState() {
+        searchIndex = 0;
+        searchMoveInFlight = false;
+        inspectionMode = "search";
+      }
+
+      async function initializeFullAreaSearch() {
+        if (!axisBridgeConnected) {
+          await connectAxis();
+        }
+
+        if (!axisBridgeConnected) {
+          return;
+        }
+
+        try {
+          appendTerminalLine("[SEARCH] moving axis to absolute X0 Y0 before full-area search");
+          await postAxis("/axis/move-absolute", {
+            x_mm: 0,
+            y_mm: 0,
+            feed_mm_min: SEARCH_FEED_MM_MIN
+          });
+
+          const response = await fetch(`${AXIS_BRIDGE_URL}/axis/status`);
+          const payload = await response.json();
+          const position = parseMachinePosition(payload.status);
+          if (!position) {
+            appendTerminalLine(`[ERROR] Could not read axis MPos from status: ${payload.status}`);
+            return;
+          }
+
+          searchStartXmm = position.x;
+          searchStartYmm = position.y;
+          searchXmm = position.x;
+          searchYmm = position.y;
+          searchPattern = buildFullAreaSearchPattern();
+          resetSearchState();
+          const bounds = getSearchBounds();
+          appendTerminalLine(
+            `[SEARCH] start WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)} bounds=X${bounds.minX.toFixed(0)}..${bounds.maxX.toFixed(0)} Y${bounds.minY.toFixed(0)}..${bounds.maxY.toFixed(0)} targets=${searchPattern.length}`
+          );
+        } catch (error) {
+          appendTerminalLine(`[ERROR] Search initialization failed: ${error.message}`);
+        }
+      }
+
+      function updateAxisPositionFromStatus(status) {
+        const position = parseMachinePosition(status);
+        if (!position) {
+          return null;
+        }
+
+        searchStartXmm = position.x;
+        searchStartYmm = position.y;
+        searchXmm = position.x;
+        searchYmm = position.y;
+        return position;
+      }
+
+      function parseMachinePosition(status) {
+        const machineMatch = status.match(/MPos:([-0-9.]+),([-0-9.]+),([-0-9.]+)/);
+        if (!machineMatch) {
+          return null;
+        }
+
+        const machineX = Number(machineMatch[1]);
+        const machineY = Number(machineMatch[2]);
+        const machineZ = Number(machineMatch[3]);
+        const offsetMatch = status.match(/WCO:([-0-9.]+),([-0-9.]+),([-0-9.]+)/);
+
+        // GRBL reports MPos as raw machine position. After Set Zero, MPos will
+        // still show the physical machine coordinate, while WCO stores the work
+        // coordinate offset. The app's search targets use work coordinates, so
+        // calculate WPos = MPos - WCO when WCO is available.
+        if (offsetMatch) {
+          return {
+            x: machineX - Number(offsetMatch[1]),
+            y: machineY - Number(offsetMatch[2]),
+            z: machineZ - Number(offsetMatch[3])
+          };
+        }
+
+        return {
+          x: machineX,
+          y: machineY,
+          z: machineZ
+        };
+      }
+
+      function formatAxisPositionForLog(status, position) {
+        if (!position) {
+          return status;
+        }
+
+        return `WPos X=${position.x.toFixed(3)} Y=${position.y.toFixed(3)} (${status})`;
+      }
+
+      function buildFullAreaSearchPattern() {
+        // First trace the full outer square so zero-signal startup immediately
+        // checks the search boundary. Then draw an X through the same area. If
+        // neither pass finds the PCB, continue with broader area coverage.
+        const bounds = getSearchBounds();
+        const pattern = [[0, 0]];
+
+        if (!bounds.requiresAxisTravel) {
+          return pattern;
+        }
+
+        addAbsoluteSearchPoint(pattern, bounds.minX, bounds.minY, bounds);
+        addAbsoluteSearchPoint(pattern, bounds.maxX, bounds.minY, bounds);
+        addAbsoluteSearchPoint(pattern, bounds.maxX, bounds.maxY, bounds);
+        addAbsoluteSearchPoint(pattern, bounds.minX, bounds.maxY, bounds);
+        addAbsoluteSearchPoint(pattern, bounds.minX, bounds.minY, bounds);
+        addAbsoluteSearchPoint(pattern, 0, 0);
+        addAbsoluteSearchPoint(pattern, bounds.minX, bounds.minY, bounds);
+        addAbsoluteSearchPoint(pattern, bounds.maxX, bounds.maxY, bounds);
+        addAbsoluteSearchPoint(pattern, 0, 0);
+        addAbsoluteSearchPoint(pattern, bounds.minX, bounds.maxY, bounds);
+        addAbsoluteSearchPoint(pattern, bounds.maxX, bounds.minY, bounds);
+        addAbsoluteSearchPoint(pattern, 0, 0);
+
+        let leftToRight = true;
+        for (let y = bounds.minY; y <= bounds.maxY; y += SEARCH_FAST_MOVE_MM) {
+          if (leftToRight) {
+            for (let x = bounds.minX; x <= bounds.maxX; x += SEARCH_FAST_MOVE_MM) {
+              addAbsoluteSearchPoint(pattern, x, y, bounds);
+            }
+          } else {
+            for (let x = bounds.maxX; x >= bounds.minX; x -= SEARCH_FAST_MOVE_MM) {
+              addAbsoluteSearchPoint(pattern, x, y, bounds);
+            }
+          }
+          leftToRight = !leftToRight;
+        }
+
+        const maxGridX = Math.ceil(
+          Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX)) / SEARCH_MOVE_MM
+        );
+        const maxGridY = Math.ceil(
+          Math.max(Math.abs(bounds.minY), Math.abs(bounds.maxY)) / SEARCH_MOVE_MM
+        );
+        const maxRadius = Math.max(maxGridX, maxGridY);
+
+        for (let radius = 1; radius <= maxRadius; radius += 1) {
+          for (let x = -radius + 1; x <= radius; x += 1) {
+            addAbsoluteSearchPoint(pattern, x * SEARCH_MOVE_MM, -radius * SEARCH_MOVE_MM, bounds);
+          }
+          for (let y = -radius + 1; y <= radius; y += 1) {
+            addAbsoluteSearchPoint(pattern, radius * SEARCH_MOVE_MM, y * SEARCH_MOVE_MM, bounds);
+          }
+          for (let x = radius - 1; x >= -radius; x -= 1) {
+            addAbsoluteSearchPoint(pattern, x * SEARCH_MOVE_MM, radius * SEARCH_MOVE_MM, bounds);
+          }
+          for (let y = radius - 1; y >= -radius; y -= 1) {
+            addAbsoluteSearchPoint(pattern, -radius * SEARCH_MOVE_MM, y * SEARCH_MOVE_MM, bounds);
+          }
+        }
+
+        addAbsoluteSearchPoint(pattern, 0, 0);
+        return pattern;
+      }
+
+      function addAbsoluteSearchPoint(pattern, xMm, yMm, bounds = getSearchBounds()) {
+        xMm = clamp(xMm, bounds.minX, bounds.maxX);
+        yMm = clamp(yMm, bounds.minY, bounds.maxY);
+        const previous = pattern[pattern.length - 1];
+        if (previous && previous[0] === xMm && previous[1] === yMm) {
+          return;
+        }
+
+        pattern.push([xMm, yMm]);
+      }
+
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function cornerCorrectionMoveFromOffset(offset, sign) {
+        const magnitude = Math.abs(offset);
+        const scaledMaxStep = clamp(
+          magnitude * CAPTURE_CORNER_MM_PER_OFFSET,
+          CAPTURE_CORNER_MIN_STEP_MM,
+          CAPTURE_CORNER_MAX_STEP_MM
+        );
+        const move = -offset * CAPTURE_CORNER_MM_PER_OFFSET * sign;
+        return clamp(move, -scaledMaxStep, scaledMaxStep);
+      }
+
+      function correctionMoveFromOffset(offset, sign) {
+        const magnitude = Math.abs(offset);
+        const scaledMaxStep = clamp(magnitude * 42, AXIS_MIN_STEP_MM, AXIS_MAX_STEP_MM);
+        const move = -offset * AXIS_CORRECTION_MM_PER_OFFSET * sign;
+        return clamp(move, -scaledMaxStep, scaledMaxStep);
+      }
+
+      function correctionFeedFromAlignment(alignment) {
+        const remaining = clamp(1 - alignment, 0, 1);
+        return AXIS_MIN_FEED_MM_MIN + (AXIS_FEED_MM_MIN - AXIS_MIN_FEED_MM_MIN) * remaining;
+      }
+
+      function correctionCooldownFromAlignment(alignment) {
+        const closeness = clamp(alignment, 0, 1);
+        return AXIS_MOVE_COOLDOWN_MS +
+          (AXIS_NEAR_ALIGN_COOLDOWN_MS - AXIS_MOVE_COOLDOWN_MS) * closeness;
+      }
+
+      function logAxisHold(reason) {
+        const now = Date.now();
+        if (now - lastAxisHoldLogTime < 1000) {
+          return;
+        }
+
+        lastAxisHoldLogTime = now;
+        appendTerminalLine(`[AXIS] hold: ${reason}`);
+      }
+
+      function drawBoardOverlay(board, ready) {
+        const video = document.getElementById("webcam-preview");
+        const overlay = document.getElementById("board-overlay");
+        const rect = video.getBoundingClientRect();
+        overlay.width = rect.width;
+        overlay.height = rect.height;
+        const context = overlay.getContext("2d");
+        context.clearRect(0, 0, overlay.width, overlay.height);
+
+        const videoAspect = video.videoWidth / video.videoHeight;
+        const viewAspect = rect.width / rect.height;
+        let displayedWidth = rect.width;
+        let displayedHeight = rect.height;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (viewAspect > videoAspect) {
+          displayedWidth = rect.height * videoAspect;
+          offsetX = (rect.width - displayedWidth) / 2;
+        } else {
+          displayedHeight = rect.width / videoAspect;
+          offsetY = (rect.height - displayedHeight) / 2;
+        }
+
+        const x = offsetX + board.x / video.videoWidth * displayedWidth;
+        const y = offsetY + board.y / video.videoHeight * displayedHeight;
+        const width = board.width / video.videoWidth * displayedWidth;
+        const height = board.height / video.videoHeight * displayedHeight;
+        const centerX = offsetX + (board.x + board.width / 2) / video.videoWidth * displayedWidth;
+        const centerY = offsetY + (board.y + board.height / 2) / video.videoHeight * displayedHeight;
+        const greenX = offsetX + (board.greenCenterX || (board.x + board.width / 2)) / video.videoWidth * displayedWidth;
+        const greenY = offsetY + (board.greenCenterY || (board.y + board.height / 2)) / video.videoHeight * displayedHeight;
+
+        context.strokeStyle = ready ? "#00ff66" : "#f59e0b";
+        context.lineWidth = 3;
+        context.strokeRect(x, y, width, height);
+        context.strokeStyle = "#38bdf8";
+        context.lineWidth = 2;
+        context.beginPath();
+        context.moveTo(centerX - 10, centerY);
+        context.lineTo(centerX + 10, centerY);
+        context.moveTo(centerX, centerY - 10);
+        context.lineTo(centerX, centerY + 10);
+        context.stroke();
+        context.fillStyle = "#ff2d55";
+        context.beginPath();
+        context.arc(greenX, greenY, 7, 0, Math.PI * 2);
+        context.fill();
+        context.fillStyle = "rgba(0, 0, 0, 0.75)";
+        context.fillRect(x, Math.max(0, y - 22), 220, 22);
+        context.fillStyle = ready ? "#00ff66" : "#f59e0b";
+        context.font = "700 14px Consolas, monospace";
+        const label = board.presenceOnly
+          ? (ready ? "BOARD IN RANGE" : "BOARD SIGNAL")
+          : (ready ? "PCB ALIGNED" : "ALIGNING");
+        const score = board.presenceOnly ? board.presenceScore : board.confidence;
+        context.fillText(`${label} ${Math.round(score * 100)}%`, x + 6, Math.max(16, y - 7));
+      }
+
+      function clearBoardOverlay() {
+        const overlay = document.getElementById("board-overlay");
+        const context = overlay.getContext("2d");
+        context.clearRect(0, 0, overlay.width, overlay.height);
+      }
+
+      async function captureBoardForInspection(board) {
+        appendTerminalLine(
+          `[CAPTURE] PCB stable. box=${Math.round(board.x)},${Math.round(board.y)},${Math.round(board.width)},${Math.round(board.height)}`
+        );
+
+        const blob = await captureStillBlob();
+        if (!blob) {
+          appendTerminalLine("[ERROR] Capture failed. Camera did not return an image.");
+          setMachineStatus("ERROR", "error");
+          return;
+        }
+
+        const imageName = nextCaptureName();
+        addImageToLog(blob, imageName, autoCaptureFolderName);
+        downloadBlob(blob, `${folderNameForFile(autoCaptureFolderName)}_board_${imageName}.jpg`);
+        appendTerminalLine(`[AI QUEUE] Image ${imageName} captured for component/defect model.`);
+        setMachineStatus("BOARD CAPTURED", "running");
+      }
+
+      function folderNameForFile(folderName) {
+        return folderName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "") || "images";
+      }
+      loadBoardSettings();
+      openPreviewCamera();
+      autoConnectAxis();
+
+    </script>
+  </body>
+</html>
