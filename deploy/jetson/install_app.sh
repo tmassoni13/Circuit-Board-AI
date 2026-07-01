@@ -59,6 +59,7 @@ User=${SERVICE_USER}
 ${SUPPLEMENTARY_GROUPS}
 WorkingDirectory=${PROJECT_ROOT}
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=${PROJECT_ROOT}/src
 ExecStart=${PYTHON_BIN} -m pcb_inspector.main axis-bridge
 Restart=always
 RestartSec=2
@@ -78,6 +79,7 @@ Type=simple
 User=${SERVICE_USER}
 WorkingDirectory=${PROJECT_ROOT}
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=${PROJECT_ROOT}/src
 ExecStart=${PYTHON_BIN} -m pcb_inspector.main serve-ui --host 127.0.0.1 --port 5500 --root ${PROJECT_ROOT}
 Restart=always
 RestartSec=2

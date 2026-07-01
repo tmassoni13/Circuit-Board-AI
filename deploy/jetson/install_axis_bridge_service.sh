@@ -50,6 +50,7 @@ User=${SERVICE_USER}
 ${SUPPLEMENTARY_GROUPS}
 WorkingDirectory=${PROJECT_ROOT}
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=${PROJECT_ROOT}/src
 ExecStart=${PYTHON_BIN} -m pcb_inspector.main axis-bridge
 Restart=always
 RestartSec=2
