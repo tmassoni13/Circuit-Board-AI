@@ -7,7 +7,7 @@ set -euo pipefail
 # `install_app.sh`. It waits for the local UI server, then opens Chromium in
 # kiosk mode pointed at the app.
 
-APP_URL="${APP_URL:-http://127.0.0.1:5500/interface_preview.html}"
+APP_URL="${APP_URL:-http://127.0.0.1:5500/user_interface.html}"
 
 for _ in {1..60}; do
   if command -v curl >/dev/null 2>&1 && curl -fsS "${APP_URL}" >/dev/null 2>&1; then
