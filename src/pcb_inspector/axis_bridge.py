@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 import threading
 import time
+from typing import List, Optional
 
 from flask import Flask, jsonify, request
 
@@ -71,7 +70,7 @@ class AxisBridge:
             self.serial.close()
             self.serial = None
 
-    def send(self, command: str) -> list[str]:
+    def send(self, command: str) -> List[str]:
         if self.serial is None or not self.serial.is_open:
             raise RuntimeError("Axis serial port is not open.")
 
@@ -114,7 +113,7 @@ class AxisBridge:
 
         return self.status()
 
-    def emergency_stop(self) -> list[str]:
+    def emergency_stop(self) -> List[str]:
         if self.serial is None or not self.serial.is_open:
             raise RuntimeError("Axis serial port is not open.")
 
@@ -131,7 +130,7 @@ class AxisBridge:
 
         return lines
 
-    def move_relative(self, x_mm: float, y_mm: float, feed_mm_min: float | None = None) -> list[str]:
+    def move_relative(self, x_mm: float, y_mm: float, feed_mm_min: Optional[float] = None) -> List[str]:
         max_step = self.config.max_step_mm
         x_mm = max(-max_step, min(max_step, x_mm))
         y_mm = max(-max_step, min(max_step, y_mm))
@@ -144,9 +143,9 @@ class AxisBridge:
         # realtime jog mode.
         return self.send(f"G1 X{x_mm:.3f} Y{y_mm:.3f} F{feed:.1f}")
 
-    def move_absolute(self, x_mm: float, y_mm: float, feed_mm_min: float | None = None) -> list[str]:
+    def move_absolute(self, x_mm: float, y_mm: float, feed_mm_min: Optional[float] = None) -> List[str]:
         feed = feed_mm_min or self.config.feed_mm_min
-        lines: list[str] = []
+        lines = []
         lines.extend(self.send("G90"))
         lines.extend(self.send(f"G1 X{x_mm:.3f} Y{y_mm:.3f} F{feed:.1f}"))
         lines.append(self.wait_until_idle())
@@ -166,11 +165,11 @@ class AxisBridge:
 
         raise TimeoutError(f"Timed out waiting for GRBL idle. Last status: {last_status}")
 
-    def _read_response_lines(self) -> list[str]:
+    def _read_response_lines(self) -> List[str]:
         if self.serial is None:
             return []
 
-        lines: list[str] = []
+        lines = []
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
             raw_line = self.serial.readline()
@@ -187,11 +186,11 @@ class AxisBridge:
 
         return lines
 
-    def _read_available_lines(self) -> list[str]:
+    def _read_available_lines(self) -> List[str]:
         if self.serial is None:
             return []
 
-        lines: list[str] = []
+        lines = []
         while self.serial.in_waiting:
             raw_line = self.serial.readline()
             if not raw_line:

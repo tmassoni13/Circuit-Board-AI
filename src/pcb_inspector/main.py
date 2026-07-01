@@ -1,6 +1,9 @@
 import argparse
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import os
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
+from socketserver import ThreadingMixIn
+from typing import List
 
 from pcb_inspector.axis_bridge import serve_axis_bridge
 from pcb_inspector.grbl_axis import GrblAxis
@@ -46,7 +49,7 @@ def axis_status(port: str, baud: int) -> None:
             print(line)
 
 
-def axis_send(port: str, baud: int, commands: list[str], wait_idle: bool) -> None:
+def axis_send(port: str, baud: int, commands: List[str], wait_idle: bool) -> None:
     """Send explicit GRBL commands for manual axis testing."""
     with GrblAxis(port=port, baud=baud) as axis:
         responses = [axis.send("M5")]
@@ -122,7 +125,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="PCB inline inspector support tools.",
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
+    subparsers.required = True
 
     axis_bridge_parser = subparsers.add_parser(
         "axis-bridge",
@@ -262,12 +266,12 @@ def serve_ui(host: str, port: int, root: Path) -> None:
     dependency on an editor extension once the app is running on the Nano.
     """
     root = root.resolve()
+    os.chdir(str(root))
 
-    class UiHandler(SimpleHTTPRequestHandler):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, directory=str(root), **kwargs)
+    class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+        daemon_threads = True
 
-    server = ThreadingHTTPServer((host, port), UiHandler)
+    server = ThreadedHTTPServer((host, port), SimpleHTTPRequestHandler)
     print(f"ui=http://{host}:{port}/user_interface.html")
     print("Press Ctrl+C to stop the UI server.")
     server.serve_forever()

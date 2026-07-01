@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 import re
 import time
+from typing import Dict, List, Tuple
 
 
 # 5x7 block font used for tiny PCB serial numbers.
@@ -11,7 +10,7 @@ import time
 # Each string is one row. "1" means burn that pixel, "0" means skip it.
 # The generator converts connected horizontal pixels into short laser strokes.
 # This is intentionally simple and dependency-free so it can run on the Pi.
-FONT_5X7: dict[str, tuple[str, ...]] = {
+FONT_5X7 = {  # type: Dict[str, Tuple[str, ...]]
     "0": ("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
     "1": ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
     "2": ("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
@@ -67,7 +66,7 @@ class SerialEngravingConfig:
     char_spacing_mm: float = 0.25
 
 
-def generate_serial_gcode(config: SerialEngravingConfig) -> list[str]:
+def generate_serial_gcode(config: SerialEngravingConfig) -> List[str]:
     """Generate GRBL laser G-code for a tiny serial number."""
     text = normalize_serial_text(config.text)
     pixel_size = config.height_mm / 7.0
@@ -118,16 +117,16 @@ def normalize_serial_text(text: str) -> str:
 
 
 def character_strokes(
-    bitmap: tuple[str, ...],
+    bitmap: Tuple[str, ...],
     origin_x: float,
     origin_y: float,
     pixel_size: float,
     power: int,
     feed_mm_min: float,
     travel_feed_mm_min: float,
-) -> list[str]:
+) -> List[str]:
     """Convert one 5x7 bitmap character into horizontal burn strokes."""
-    lines: list[str] = []
+    lines = []
 
     for row_index, row in enumerate(bitmap):
         y = origin_y - (row_index * pixel_size)
@@ -157,7 +156,7 @@ def character_strokes(
     return lines
 
 
-def write_gcode_file(lines: list[str], output_path: Path) -> Path:
+def write_gcode_file(lines: List[str], output_path: Path) -> Path:
     """Write generated G-code to disk."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -189,9 +188,9 @@ def stream_gcode_file(port: str, baud: int, gcode_path: Path) -> None:
                 raise RuntimeError(f"GRBL rejected command {command!r}: {response}")
 
 
-def read_response_lines(serial_port) -> list[str]:
+def read_response_lines(serial_port) -> List[str]:
     """Read a normal GRBL command response."""
-    lines: list[str] = []
+    lines = []
     deadline = time.monotonic() + 2.0
     while time.monotonic() < deadline:
         raw_line = serial_port.readline()
@@ -209,9 +208,9 @@ def read_response_lines(serial_port) -> list[str]:
     return lines
 
 
-def read_available_lines(serial_port) -> list[str]:
+def read_available_lines(serial_port) -> List[str]:
     """Drain startup/status text already waiting in the serial buffer."""
-    lines: list[str] = []
+    lines = []
     while serial_port.in_waiting:
         raw_line = serial_port.readline()
         if not raw_line:

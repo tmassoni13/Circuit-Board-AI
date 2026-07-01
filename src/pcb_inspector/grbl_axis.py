@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from glob import glob
 import time
+from typing import List, Tuple
 
 
 @dataclass(frozen=True)
 class GrblResponse:
     command: str
-    lines: tuple[str, ...]
+    lines: Tuple[str, ...]
 
 
 class GrblAxis:
@@ -45,7 +46,7 @@ class GrblAxis:
             self.serial.close()
             self.serial = None
 
-    def startup_safe(self, unlock: bool = False) -> list[GrblResponse]:
+    def startup_safe(self, unlock: bool = False) -> List[GrblResponse]:
         # Always force the laser/spindle output off before doing anything else.
         responses = [
             self.send("M5"),
@@ -58,7 +59,7 @@ class GrblAxis:
 
         return responses
 
-    def tiny_motion_test(self, distance_mm: float, feed_mm_min: float) -> list[GrblResponse]:
+    def tiny_motion_test(self, distance_mm: float, feed_mm_min: float) -> List[GrblResponse]:
         # Relative move out and back. This verifies X/Y motion without changing
         # the final camera-stage position.
         return [
@@ -106,11 +107,11 @@ class GrblAxis:
         self.serial.flush()
         return GrblResponse(command=clean_command, lines=tuple(self._read_response_lines()))
 
-    def _read_response_lines(self) -> list[str]:
+    def _read_response_lines(self) -> List[str]:
         if self.serial is None:
             return []
 
-        lines: list[str] = []
+        lines = []
         deadline = time.monotonic() + self.timeout_seconds
         while time.monotonic() < deadline:
             raw_line = self.serial.readline()
@@ -127,11 +128,11 @@ class GrblAxis:
 
         return lines
 
-    def _read_available_lines(self) -> list[str]:
+    def _read_available_lines(self) -> List[str]:
         if self.serial is None:
             return []
 
-        lines: list[str] = []
+        lines = []
         while self.serial.in_waiting:
             raw_line = self.serial.readline()
             if not raw_line:
