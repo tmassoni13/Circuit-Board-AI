@@ -1,4 +1,3 @@
-from dataclasses import asdict, dataclass
 import threading
 import time
 from typing import List, Optional
@@ -8,22 +7,36 @@ from flask import Flask, jsonify, request
 from pcb_inspector.grbl_axis import resolve_grbl_port
 
 
-@dataclass(frozen=True)
 class AxisBridgeConfig:
-    # Serial port exposed by the CH340 USB serial adapter on the Atomstack
-    # controller. Use `auto` on the Jetson Nano so the bridge finds the USB
-    # serial device as `/dev/ttyUSB0` or `/dev/ttyACM0`.
-    port: str = "auto"
+    def __init__(
+        self,
+        port: str = "auto",
+        baud: int = 115200,
+        max_step_mm: float = 60.0,
+        feed_mm_min: float = 2000.0,
+    ) -> None:
+        # Serial port exposed by the CH340 USB serial adapter on the Atomstack
+        # controller. Use `auto` on the Jetson Nano so the bridge finds the USB
+        # serial device as `/dev/ttyUSB0` or `/dev/ttyACM0`.
+        self.port = port
 
-    # GRBL's common serial baud rate.
-    baud: int = 115200
+        # GRBL's common serial baud rate.
+        self.baud = baud
 
-    # Bound every browser-requested correction so a detector mistake cannot
-    # command a large unexpected axis move.
-    max_step_mm: float = 60.0
+        # Bound every browser-requested correction so a detector mistake cannot
+        # command a large unexpected axis move.
+        self.max_step_mm = max_step_mm
 
-    # Default feed rate for relative alignment moves.
-    feed_mm_min: float = 2000.0
+        # Default feed rate for relative alignment moves.
+        self.feed_mm_min = feed_mm_min
+
+    def as_dict(self):
+        return {
+            "port": self.port,
+            "baud": self.baud,
+            "max_step_mm": self.max_step_mm,
+            "feed_mm_min": self.feed_mm_min,
+        }
 
 
 class AxisBridge:
@@ -219,7 +232,7 @@ def create_axis_bridge_app(config: AxisBridgeConfig) -> Flask:
     def axis_status():
         if request.method == "OPTIONS":
             return ("", 204)
-        return jsonify({"status": bridge.status(), "config": asdict(config)})
+        return jsonify({"status": bridge.status(), "config": config.as_dict()})
 
     @app.route("/axis/move", methods=["POST", "OPTIONS"])
     def axis_move():

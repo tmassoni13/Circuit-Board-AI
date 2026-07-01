@@ -1,13 +1,12 @@
-from dataclasses import dataclass
 from glob import glob
 import time
 from typing import List, Tuple
 
 
-@dataclass(frozen=True)
 class GrblResponse:
-    command: str
-    lines: Tuple[str, ...]
+    def __init__(self, command: str, lines: Tuple[str, ...]) -> None:
+        self.command = command
+        self.lines = lines
 
 
 class GrblAxis:

@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from pathlib import Path
 import re
 import time
@@ -54,16 +53,26 @@ FONT_5X7 = {  # type: Dict[str, Tuple[str, ...]]
 }
 
 
-@dataclass(frozen=True)
 class SerialEngravingConfig:
-    text: str
-    x_mm: float = 0.0
-    y_mm: float = 0.0
-    height_mm: float = 2.0
-    power: int = 120
-    feed_mm_min: float = 400.0
-    travel_feed_mm_min: float = 3000.0
-    char_spacing_mm: float = 0.25
+    def __init__(
+        self,
+        text: str,
+        x_mm: float = 0.0,
+        y_mm: float = 0.0,
+        height_mm: float = 2.0,
+        power: int = 120,
+        feed_mm_min: float = 400.0,
+        travel_feed_mm_min: float = 3000.0,
+        char_spacing_mm: float = 0.25,
+    ) -> None:
+        self.text = text
+        self.x_mm = x_mm
+        self.y_mm = y_mm
+        self.height_mm = height_mm
+        self.power = power
+        self.feed_mm_min = feed_mm_min
+        self.travel_feed_mm_min = travel_feed_mm_min
+        self.char_spacing_mm = char_spacing_mm
 
 
 def generate_serial_gcode(config: SerialEngravingConfig) -> List[str]:

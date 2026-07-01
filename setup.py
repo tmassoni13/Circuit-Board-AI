@@ -10,7 +10,6 @@ setup(
     install_requires=[
         "Flask",
         "pyserial",
-        "dataclasses; python_version<'3.7'",
     ],
     entry_points={
         "console_scripts": [
