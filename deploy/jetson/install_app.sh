@@ -24,6 +24,7 @@ AXIS_SERVICE_NAME="pcb-axis-bridge.service"
 UI_SERVICE_NAME="pcb-inspector-ui.service"
 AXIS_SERVICE_PATH="/etc/systemd/system/${AXIS_SERVICE_NAME}"
 UI_SERVICE_PATH="/etc/systemd/system/${UI_SERVICE_NAME}"
+ENV_PATH="/etc/pcb-inline-inspector.env"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 AUTOSTART_PATH="${AUTOSTART_DIR}/pcb-inline-inspector.desktop"
 
@@ -39,6 +40,14 @@ fi
 
 echo "[SETUP] Installing Python package from ${PROJECT_ROOT}..."
 "${PYTHON_BIN}" -m pip install -e "${PROJECT_ROOT}"
+
+if [[ ! -f "${ENV_PATH}" ]]; then
+  echo "[SETUP] Creating ${ENV_PATH}. Add your Gemini API key there before AI inspection."
+  sudo tee "${ENV_PATH}" >/dev/null <<ENV
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash
+ENV
+fi
 
 SUPPLEMENTARY_GROUPS=""
 if getent group dialout >/dev/null; then
@@ -80,6 +89,7 @@ User=${SERVICE_USER}
 WorkingDirectory=${PROJECT_ROOT}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=${PROJECT_ROOT}/src
+EnvironmentFile=-${ENV_PATH}
 ExecStart=${PYTHON_BIN} -m pcb_inspector.main serve-ui --host 127.0.0.1 --port 5500 --root ${PROJECT_ROOT}
 Restart=always
 RestartSec=2

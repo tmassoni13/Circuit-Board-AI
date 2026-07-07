@@ -1,11 +1,11 @@
 import argparse
+import json
 import os
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from socketserver import ThreadingMixIn
 from typing import List
 
-from pcb_inspector.axis_bridge import serve_axis_bridge
 from pcb_inspector.grbl_axis import GrblAxis
 from pcb_inspector.laser_engraver import (
     SerialEngravingConfig,
@@ -214,6 +214,8 @@ def main() -> None:
     args = parse_args()
 
     if args.command == "axis-bridge":
+        from pcb_inspector.axis_bridge import serve_axis_bridge
+
         serve_axis_bridge(
             port=args.port,
             baud=args.baud,
@@ -271,7 +273,33 @@ def serve_ui(host: str, port: int, root: Path) -> None:
     class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         daemon_threads = True
 
-    server = ThreadedHTTPServer((host, port), SimpleHTTPRequestHandler)
+    class InspectorUiHandler(SimpleHTTPRequestHandler):
+        def do_POST(self):
+            if self.path != "/api/analyze-board":
+                self.send_error(404, "Unknown endpoint")
+                return
+
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                raw_body = self.rfile.read(content_length).decode("utf-8")
+                payload = json.loads(raw_body or "{}")
+
+                from pcb_inspector.gemini_inspection import analyze_pcb_images
+
+                result = analyze_pcb_images(payload.get("images") or [])
+                self.send_json(200, result)
+            except Exception as error:
+                self.send_json(500, {"error": str(error)})
+
+        def send_json(self, status_code, payload):
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadedHTTPServer((host, port), InspectorUiHandler)
     print(f"ui=http://{host}:{port}/user_interface.html")
     print("Press Ctrl+C to stop the UI server.")
     server.serve_forever()
