@@ -1,0 +1,155 @@
+import json
+import os
+import re
+from typing import Dict, List
+from urllib import request
+from urllib.error import HTTPError, URLError
+
+
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+
+
+INSPECTION_PROMPT = """
+You are inspecting PCB images for production defects.
+
+Analyze all provided images as one board inspection. Look for visible fatal
+manufacturing defects such as missing parts, tombstoned parts, shifted parts,
+wrong polarity/orientation, bridged solder, insufficient solder, lifted leads,
+damaged pads, damaged traces, contamination, or obvious physical damage.
+
+Return only JSON with this shape:
+{
+  "verdict": "good" or "bad",
+  "confidence": number from 0 to 1,
+  "summary": "short operator-facing sentence",
+  "fatal_defects": [
+    {
+      "image": "image name if known",
+      "type": "short defect type",
+      "location": "short location",
+      "reason": "short reason"
+    }
+  ],
+  "notes": ["short useful notes"]
+}
+
+If the image is not clear enough to inspect, return verdict "bad" and explain
+that the image quality is insufficient.
+"""
+
+
+def analyze_pcb_images(images: List[Dict[str, str]]) -> Dict:
+    """Send board images to Gemini and return a normalized inspection result.
+
+    The browser sends already-downscaled JPEG images as base64 strings. The
+    API key is read from `GEMINI_API_KEY` so secrets stay on the Jetson instead
+    of being committed into the web UI.
+    """
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not set for the UI service.")
+
+    if not images:
+        raise ValueError("No images were provided for Gemini analysis.")
+
+    model = os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        + model
+        + ":generateContent?key="
+        + api_key
+    )
+
+    parts = [{"text": INSPECTION_PROMPT.strip()}]
+    for image in images:
+        name = image.get("name", "unknown")
+        mime_type = image.get("mime_type", "image/jpeg")
+        data = image.get("data", "")
+        if not data:
+            continue
+        parts.append({"text": "Image name: {}".format(name)})
+        parts.append({"inline_data": {"mime_type": mime_type, "data": data}})
+
+    payload = {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "responseMimeType": "application/json",
+        },
+    }
+
+    request_body = json.dumps(payload).encode("utf-8")
+    api_request = request.Request(
+        endpoint,
+        data=request_body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(api_request, timeout=90) as response:
+            response_body = response.read().decode("utf-8")
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError("Gemini API HTTP {}: {}".format(error.code, detail))
+    except URLError as error:
+        raise RuntimeError("Gemini API connection failed: {}".format(error.reason))
+
+    raw_result = json.loads(response_body)
+    text = extract_gemini_text(raw_result)
+    parsed = parse_json_text(text)
+    return normalize_inspection_result(parsed, model)
+
+
+def extract_gemini_text(raw_result: Dict) -> str:
+    candidates = raw_result.get("candidates") or []
+    if not candidates:
+        raise RuntimeError("Gemini returned no candidates.")
+
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts") or []
+    text_parts = [part.get("text", "") for part in parts if part.get("text")]
+    text = "\n".join(text_parts).strip()
+    if not text:
+        raise RuntimeError("Gemini returned an empty response.")
+    return text
+
+
+def parse_json_text(text: str) -> Dict:
+    try:
+        return json.loads(text)
+    except ValueError:
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if not match:
+            raise RuntimeError("Gemini response was not JSON: {}".format(text[:500]))
+        return json.loads(match.group(0))
+
+
+def normalize_inspection_result(parsed: Dict, model: str) -> Dict:
+    verdict = str(parsed.get("verdict", "bad")).strip().lower()
+    if verdict not in ("good", "bad"):
+        verdict = "bad"
+
+    try:
+        confidence = float(parsed.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    fatal_defects = parsed.get("fatal_defects") or []
+    if not isinstance(fatal_defects, list):
+        fatal_defects = []
+
+    notes = parsed.get("notes") or []
+    if not isinstance(notes, list):
+        notes = [str(notes)]
+
+    return {
+        "verdict": verdict,
+        "passed": verdict == "good",
+        "confidence": confidence,
+        "summary": str(parsed.get("summary", "")).strip() or "No summary returned.",
+        "fatal_defects": fatal_defects,
+        "notes": notes,
+        "model": model,
+    }
