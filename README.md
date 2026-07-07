@@ -52,6 +52,31 @@ The installed app starts automatically when the Jetson boots:
 - `pcb-inspector-ui.service` serves the browser UI on port 5500.
 - the desktop autostart entry opens Chromium in kiosk mode on the HDMI display.
 
+## Gemini AI Inspection
+
+The app sends captured board images from the Jetson UI server to Gemini for
+good/bad inspection. Put the API key on the Jetson, not in GitHub:
+
+```bash
+sudo nano /etc/pcb-inline-inspector.env
+```
+
+Set:
+
+```text
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-3.5-flash
+```
+
+Then restart the UI server:
+
+```bash
+sudo systemctl restart pcb-inspector-ui.service
+```
+
+If the key is missing, captures still save to the image log, but Gemini analysis
+will report an error in the terminal panel.
+
 Check services:
 
 ```bash
