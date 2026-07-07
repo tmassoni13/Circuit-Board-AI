@@ -564,6 +564,19 @@
         font-size: 11px;
       }
 
+      .image-log-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .image-analyze {
+        min-height: 30px;
+        border-color: #0e7490;
+        background: #164e63;
+        font-size: 11px;
+      }
+
       .image-preview {
         position: absolute;
         inset: 0;
@@ -1571,6 +1584,7 @@
         const url = URL.createObjectURL(blob);
         const entry = {
           name: imageName,
+          blob,
           url,
           capturedAt: new Date().toLocaleTimeString()
         };
@@ -1705,9 +1719,24 @@
             </button>
             <div class="image-log-name">Image ${entry.name}</div>
             <div class="image-log-meta">${escapeHtml(folder.name)} | ${entry.capturedAt}</div>
-            <button class="image-delete" type="button" onclick="deleteImageFromLog('${escapeJs(entry.name)}')">Delete</button>
+            <div class="image-log-actions">
+              <button class="image-analyze" type="button" onclick="analyzeImageFromLog('${escapeJs(entry.name)}')">Gemini</button>
+              <button class="image-delete" type="button" onclick="deleteImageFromLog('${escapeJs(entry.name)}')">Delete</button>
+            </div>
           </article>
         `).join("");
+      }
+
+      async function analyzeImageFromLog(imageName) {
+        const folder = getActiveImageFolder();
+        const entry = folder.entries.find((candidate) => candidate.name === imageName);
+        if (!entry || !entry.blob) {
+          appendTerminalLine(`[GEMINI ERROR] image ${imageName}: image data is not available.`);
+          return;
+        }
+
+        appendTerminalLine(`[GEMINI] manual test for image ${imageName} from ${folder.name}.`);
+        await analyzeBoardImages(imageName, [{ name: imageName, blob: entry.blob }], "IMAGE LOG");
       }
 
       function openImagePreview(imageName) {
