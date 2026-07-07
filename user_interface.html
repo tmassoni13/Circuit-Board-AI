@@ -1131,6 +1131,8 @@
       const CAPTURE_PRE_IMAGE_SETTLE_MS = 1000;
       const CAPTURE_SECOND_IMAGE_PRE_SETTLE_MS = 2000;
       const CAPTURE_POST_IMAGE_SETTLE_MS = 1000;
+      const GEMINI_ANALYSIS_IMAGE_MAX_DIMENSION = 1800;
+      const GEMINI_ANALYSIS_JPEG_QUALITY = 0.82;
       const CAPTURE_SCAN_SIGN_X = -1;
       const CAPTURE_SCAN_SIGN_Y = 1;
       const AXIS_ABSOLUTE_MIN_X_MM = -180;
@@ -1514,6 +1516,7 @@
       }
 
       function openSettings() {
+        closeImageLog();
         document.getElementById("settings-overlay").classList.add("active");
       }
 
@@ -1522,6 +1525,7 @@
       }
 
       function openImageLog() {
+        closeSettings();
         imageLogView = "folders";
         renderImageLogView();
         document.getElementById("image-log-overlay").classList.add("active");
@@ -2184,12 +2188,138 @@
         const imageName = nextCaptureName();
         addImageToLog(blob, imageName, DEFAULT_IMAGE_FOLDER_NAME);
         appendTerminalLine(`[CAPTURE] Image ${imageName} saved to ${DEFAULT_IMAGE_FOLDER_NAME}.`);
+        await analyzeBoardImages(imageName, [{ name: imageName, blob }], "MANUAL");
+      }
+
+      async function analyzeBoardImages(boardNumber, capturedImages, source = "AUTO") {
+        if (!capturedImages.length) {
+          return null;
+        }
+
+        try {
+          setMachineStatus("ANALYZING", "searching");
+          appendTerminalLine(`[GEMINI] analyzing board ${boardNumber} with ${capturedImages.length} image(s).`);
+
+          const images = [];
+          for (const image of capturedImages) {
+            images.push(await blobToGeminiImage(image.blob, image.name));
+          }
+
+          const response = await fetch("/api/analyze-board", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ board: String(boardNumber), source, images })
+          });
+
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.error || `HTTP ${response.status}`);
+          }
+
+          recordInspectionResult(boardNumber, result);
+          return result;
+        } catch (error) {
+          appendTerminalLine(`[GEMINI ERROR] board ${boardNumber}: ${error.message}`);
+          setMachineStatus("AI ERROR", "error");
+          return null;
+        }
+      }
+
+      async function blobToGeminiImage(blob, imageName) {
+        const resizedBlob = await resizeImageBlobForAnalysis(blob);
+        const dataUrl = await blobToDataUrl(resizedBlob);
+        const commaIndex = dataUrl.indexOf(",");
+        return {
+          name: imageName,
+          mime_type: resizedBlob.type || "image/jpeg",
+          data: commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl
+        };
+      }
+
+      function resizeImageBlobForAnalysis(blob) {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          const objectUrl = URL.createObjectURL(blob);
+
+          image.onload = () => {
+            const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
+            const scale = largestSide > GEMINI_ANALYSIS_IMAGE_MAX_DIMENSION
+              ? GEMINI_ANALYSIS_IMAGE_MAX_DIMENSION / largestSide
+              : 1;
+            const width = Math.max(1, Math.round(image.naturalWidth * scale));
+            const height = Math.max(1, Math.round(image.naturalHeight * scale));
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext("2d");
+            context.drawImage(image, 0, 0, width, height);
+            URL.revokeObjectURL(objectUrl);
+            canvas.toBlob(
+              (resizedBlob) => {
+                if (resizedBlob) {
+                  resolve(resizedBlob);
+                } else {
+                  reject(new Error("Could not prepare image for Gemini."));
+                }
+              },
+              "image/jpeg",
+              GEMINI_ANALYSIS_JPEG_QUALITY
+            );
+          };
+
+          image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error("Could not load captured image for Gemini."));
+          };
+
+          image.src = objectUrl;
+        });
+      }
+
+      function blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(new Error("Could not read image data."));
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      function recordInspectionResult(boardNumber, result) {
+        const passed = Boolean(result.passed);
+        const confidencePercent = Math.round((Number(result.confidence) || 0) * 100);
+        const defectCount = Array.isArray(result.fatal_defects)
+          ? result.fatal_defects.length
+          : 0;
+        const statusText = passed ? "PASS" : "FAIL";
+        const summary = result.summary || (passed ? "No fatal defects" : "Fatal defect detected");
+
+        incrementResultCounter(passed ? "passed-count" : "failed-count");
+        setMachineStatus(passed ? "BOARD PASSED" : "BOARD FAILED", passed ? "running" : "error");
+        appendTerminalLine(
+          `[GEMINI RESULT] board ${boardNumber} ${statusText} confidence=${confidencePercent}% fatal_defects=${defectCount} ${summary}`
+        );
+
+        if (defectCount > 0) {
+          result.fatal_defects.slice(0, 5).forEach((defect, index) => {
+            appendTerminalLine(
+              `[DEFECT ${index + 1}] ${defect.type || "defect"} ${defect.location || ""} ${defect.reason || ""}`.trim()
+            );
+          });
+        }
+      }
+
+      function incrementResultCounter(id) {
+        const element = document.getElementById(id);
+        const current = Number(element.textContent) || 0;
+        element.textContent = String(current + 1);
       }
 
       async function captureBoardImageSet(options = {}) {
         const requireMachineRunning = options.requireMachineRunning !== false;
         const logPrefix = options.logPrefix || "CAPTURE";
         const alignFromCamera = options.alignFromCamera === true;
+        const shouldAnalyze = options.analyze !== false && logPrefix !== "TEST CAPTURE";
         const settings = readBoardSettings();
         const initialCapturePlan = buildBoardCapturePlan(settings, "center");
         const capturePlan = alignFromCamera && initialCapturePlan.requiresAxisTravel
@@ -2207,6 +2337,8 @@
         );
 
         let previousCaptureTarget = null;
+        const boardNumber = nextBoardNumber;
+        const capturedImages = [];
         if (alignFromCamera && capturePlan.requiresAxisTravel) {
           const alignedOrigin = await alignCameraToVisibleBoardCorner(logPrefix);
           if (!alignedOrigin) {
@@ -2242,11 +2374,12 @@
           }
 
           const imageName = capturePlan.imagesPerBoard <= 1
-            ? String(nextBoardNumber)
-            : `${nextBoardNumber}.${target.imageNumber}`;
+            ? String(boardNumber)
+            : `${boardNumber}.${target.imageNumber}`;
           addImageToLog(blob, imageName, autoCaptureFolderName);
+          capturedImages.push({ name: imageName, blob });
           appendTerminalLine(
-            `[${logPrefix}] board ${nextBoardNumber} image ${target.imageNumber}/${capturePlan.imagesPerBoard} dX=${target.xMm.toFixed(1)} dY=${target.yMm.toFixed(1)}`
+            `[${logPrefix}] board ${boardNumber} image ${target.imageNumber}/${capturePlan.imagesPerBoard} dX=${target.xMm.toFixed(1)} dY=${target.yMm.toFixed(1)}`
           );
           previousCaptureTarget = target;
           await wait(CAPTURE_POST_IMAGE_SETTLE_MS);
@@ -2259,7 +2392,11 @@
           await moveAxisToCaptureTarget({ xMm: 0, yMm: 0, imageNumber: 0 });
         }
 
-        setMachineStatus("BOARD CAPTURED", "running");
+        if (shouldAnalyze) {
+          await analyzeBoardImages(boardNumber, capturedImages, logPrefix);
+        } else {
+          setMachineStatus("BOARD CAPTURED", "running");
+        }
       }
 
       async function testCapturePositions() {
@@ -3405,9 +3542,8 @@
 
         const imageName = nextCaptureName();
         addImageToLog(blob, imageName, autoCaptureFolderName);
-        downloadBlob(blob, `${folderNameForFile(autoCaptureFolderName)}_board_${imageName}.jpg`);
-        appendTerminalLine(`[AI QUEUE] Image ${imageName} captured for component/defect model.`);
-        setMachineStatus("BOARD CAPTURED", "running");
+        appendTerminalLine(`[CAPTURE] Image ${imageName} captured for Gemini inspection.`);
+        await analyzeBoardImages(imageName, [{ name: imageName, blob }], "AUTO");
       }
 
       function folderNameForFile(folderName) {
