@@ -51,6 +51,8 @@ The installed app starts automatically when the Jetson boots:
 - `pcb-axis-bridge.service` starts the GRBL/2D-axis bridge.
 - `pcb-inspector-ui.service` serves the browser UI on port 5500.
 - the desktop autostart entry opens Chromium in kiosk mode on the HDMI display.
+- the desktop icon `PCB Inline Inspector` opens the app manually.
+- the desktop icon `Update PCB Inspector` pulls GitHub updates and restarts the services.
 
 ## Gemini AI Inspection
 
@@ -101,23 +103,28 @@ sudo reboot
 Open the UI manually if kiosk mode does not open:
 
 ```bash
-chromium-browser http://127.0.0.1:5500/user_interface.html
+~/Circuit-Board-AI/deploy/jetson/launch_kiosk.sh
 ```
 
 ## Updating From GitHub
 
-After pushing changes from the development computer, update the Jetson from the
-project folder:
+After pushing changes from the development computer, update the Jetson by
+double-clicking the desktop icon named `Update PCB Inspector`, or run this from
+the project folder:
 
 ```bash
 cd ~/Circuit-Board-AI
 bash deploy/jetson/update_app.sh
 ```
 
-That script runs `git pull`, refreshes the editable Python install, and restarts
-the axis bridge and UI server.
+That script runs `git pull`, prints the installed commit, refreshes the editable
+Python install, checks that expected UI markers exist, and restarts the axis
+bridge and UI server.
 
-If the browser is already open, refresh the page or reboot:
+After the update, open the desktop icon named `PCB Inline Inspector`. The UI
+server sends no-cache headers and the launcher uses a cache-busted URL so the
+browser does not keep showing the old interface. If Chromium is still stuck,
+reboot:
 
 ```bash
 sudo reboot
