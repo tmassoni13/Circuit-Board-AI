@@ -67,7 +67,7 @@ Set:
 
 ```text
 GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
 Then restart the UI server:
