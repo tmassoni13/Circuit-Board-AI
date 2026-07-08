@@ -27,6 +27,9 @@ UI_SERVICE_PATH="/etc/systemd/system/${UI_SERVICE_NAME}"
 ENV_PATH="/etc/pcb-inline-inspector.env"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 AUTOSTART_PATH="${AUTOSTART_DIR}/pcb-inline-inspector.desktop"
+DESKTOP_DIR="${HOME}/Desktop"
+APP_DESKTOP_PATH="${DESKTOP_DIR}/pcb-inline-inspector.desktop"
+UPDATE_DESKTOP_PATH="${DESKTOP_DIR}/update-pcb-inline-inspector.desktop"
 
 if [[ -z "${PYTHON_BIN}" ]]; then
   echo "python3 was not found. Install Python 3 before installing the app." >&2
@@ -100,6 +103,8 @@ SERVICE
 
 echo "[SETUP] Installing desktop kiosk autostart..."
 chmod +x "${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh"
+chmod +x "${PROJECT_ROOT}/deploy/jetson/update_app.sh"
+chmod +x "${PROJECT_ROOT}/deploy/jetson/run_update.sh"
 mkdir -p "${AUTOSTART_DIR}"
 cat > "${AUTOSTART_PATH}" <<DESKTOP
 [Desktop Entry]
@@ -110,6 +115,30 @@ Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
 Terminal=false
 X-GNOME-Autostart-enabled=true
 DESKTOP
+
+echo "[SETUP] Installing clickable desktop launchers..."
+mkdir -p "${DESKTOP_DIR}"
+cat > "${APP_DESKTOP_PATH}" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=PCB Inline Inspector
+Comment=Open the PCB Inline Inspector app
+Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
+Terminal=false
+Categories=Utility;
+DESKTOP
+
+cat > "${UPDATE_DESKTOP_PATH}" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Update PCB Inspector
+Comment=Pull the newest app from GitHub and restart services
+Exec=${PROJECT_ROOT}/deploy/jetson/run_update.sh
+Terminal=true
+Categories=Utility;
+DESKTOP
+
+chmod +x "${APP_DESKTOP_PATH}" "${UPDATE_DESKTOP_PATH}"
 
 echo "[SETUP] Enabling services..."
 sudo systemctl daemon-reload

@@ -274,6 +274,16 @@ def serve_ui(host: str, port: int, root: Path) -> None:
         daemon_threads = True
 
     class InspectorUiHandler(SimpleHTTPRequestHandler):
+        def end_headers(self):
+            # The Jetson kiosk browser can otherwise keep showing an older
+            # `user_interface.html` after a GitHub update. These headers force
+            # Chromium to ask the local UI server for the current file each
+            # time the page is opened or refreshed.
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            SimpleHTTPRequestHandler.end_headers(self)
+
         def do_POST(self):
             if self.path != "/api/analyze-board":
                 self.send_error(404, "Unknown endpoint")

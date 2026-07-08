@@ -7,7 +7,8 @@ set -euo pipefail
 # `install_app.sh`. It waits for the local UI server, then opens Chromium in
 # kiosk mode pointed at the app.
 
-APP_URL="${APP_URL:-http://127.0.0.1:5500/user_interface.html}"
+BASE_APP_URL="${APP_URL:-http://127.0.0.1:5500/user_interface.html}"
+APP_URL="${BASE_APP_URL}?v=$(date +%s)"
 
 for _ in {1..60}; do
   if command -v curl >/dev/null 2>&1 && curl -fsS "${APP_URL}" >/dev/null 2>&1; then
@@ -17,15 +18,15 @@ for _ in {1..60}; do
 done
 
 if command -v chromium-browser >/dev/null 2>&1; then
-  exec chromium-browser --kiosk "${APP_URL}"
+  exec chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble "${APP_URL}"
 fi
 
 if command -v chromium >/dev/null 2>&1; then
-  exec chromium --kiosk "${APP_URL}"
+  exec chromium --kiosk --noerrdialogs --disable-session-crashed-bubble "${APP_URL}"
 fi
 
 if command -v google-chrome >/dev/null 2>&1; then
-  exec google-chrome --kiosk "${APP_URL}"
+  exec google-chrome --kiosk --noerrdialogs --disable-session-crashed-bubble "${APP_URL}"
 fi
 
 echo "No supported Chromium browser was found. Open ${APP_URL} manually." >&2
