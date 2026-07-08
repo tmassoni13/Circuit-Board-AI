@@ -427,6 +427,7 @@
 
       .settings-actions {
         display: flex;
+        gap: 8px;
         justify-content: flex-end;
       }
 
@@ -534,6 +535,30 @@
 
       .image-log-path.active {
         display: flex;
+      }
+
+      .folder-context-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .folder-context-button {
+        white-space: nowrap;
+      }
+
+      .folder-context-editor {
+        width: 100%;
+        height: 34px;
+        min-height: 34px;
+        resize: none;
+        border: 1px solid #2f3a45;
+        background: #05080b;
+        color: #f8fafc;
+        padding: 8px;
+        font: 12px Consolas, monospace;
       }
 
       .path-button {
@@ -1124,6 +1149,7 @@
                     <p class="settings-note">Captured images are numbered by board and image position.</p>
                   </div>
                   <div class="settings-actions">
+                    <button id="folder-prompt-toggle" class="path-button folder-context-button hidden" type="button" onclick="toggleActiveFolderPromptEditor()">Add Gemini Context</button>
                     <button class="settings-close" type="button" onclick="closeImageLog()" aria-label="Close image log">X</button>
                   </div>
                 </div>
@@ -1234,16 +1260,19 @@
       let imageFolders = [
         {
           name: DEFAULT_IMAGE_FOLDER_NAME,
-          entries: []
+          entries: [],
+          promptNote: ""
         },
         {
           name: FAILURE_IMAGE_FOLDER_NAME,
-          entries: []
+          entries: [],
+          promptNote: ""
         }
       ];
       let activeImageFolderName = DEFAULT_IMAGE_FOLDER_NAME;
       let autoCaptureFolderName = DEFAULT_IMAGE_FOLDER_NAME;
       let imageLogView = "folders";
+      let activeFolderPromptEditorName = null;
       let nextBoardNumber = 1;
       let nextImageNumberForBoard = 1;
       let boardPresenceFrames = 0;
@@ -1319,7 +1348,9 @@
           saved.backgroundColor ||
           legacyBackgroundColor(saved) ||
           DEFAULT_BOARD_BACKGROUND_COLOR;
+        loadSavedImageFolders();
         autoCaptureFolderName = saved.autoCaptureFolderName || DEFAULT_IMAGE_FOLDER_NAME;
+        loadFolderPromptSettings();
         ensureImageFolder(autoCaptureFolderName);
         renderAutoCaptureFolderSelect();
         updateBoardFovSummary();
@@ -1593,6 +1624,7 @@
       function openImageLog() {
         closeSettings();
         imageLogView = "folders";
+        activeFolderPromptEditorName = null;
         renderImageLogView();
         document.getElementById("image-log-overlay").classList.add("active");
       }
@@ -1601,15 +1633,18 @@
         renderImageFolders();
         renderImageLog();
         renderImageLogPath();
+        renderFolderPromptHeaderButton();
         updateInspectionCounters();
       }
 
       function closeImageLog() {
+        activeFolderPromptEditorName = null;
         document.getElementById("image-log-overlay").classList.remove("active");
       }
 
       function showImageFolderRoot() {
         imageLogView = "folders";
+        activeFolderPromptEditorName = null;
         renderImageLogView();
       }
 
@@ -1669,12 +1704,41 @@
         if (!folder) {
           folder = {
             name: folderName,
-            entries: []
+            entries: [],
+            promptNote: getSavedFolderPrompt(folderName)
           };
           imageFolders.push(folder);
+        } else if (typeof folder.promptNote !== "string") {
+          folder.promptNote = getSavedFolderPrompt(folderName);
         }
 
         return folder;
+      }
+
+      function loadSavedImageFolders() {
+        const savedFolders = getSavedImageFolderNames();
+        for (const folderName of savedFolders) {
+          if (!folderName || PROTECTED_IMAGE_FOLDERS.indexOf(folderName) >= 0) {
+            continue;
+          }
+          ensureImageFolder(folderName);
+        }
+      }
+
+      function getSavedImageFolderNames() {
+        try {
+          const savedFolders = JSON.parse(localStorage.getItem("pcb-image-folders") || "[]");
+          return Array.isArray(savedFolders) ? savedFolders : [];
+        } catch (error) {
+          return [];
+        }
+      }
+
+      function saveImageFolderNames() {
+        const userFolders = imageFolders
+          .map((folder) => folder.name)
+          .filter((folderName) => canDeleteImageFolder(folderName));
+        localStorage.setItem("pcb-image-folders", JSON.stringify(userFolders));
       }
 
       function renderAutoCaptureFolderSelect() {
@@ -1722,6 +1786,7 @@
 
       function selectImageFolder(folderName) {
         activeImageFolderName = folderName;
+        activeFolderPromptEditorName = null;
         imageLogView = "folder";
         renderImageLogView();
       }
@@ -1740,17 +1805,111 @@
         if (!imageFolders.some((folder) => folder.name.toLowerCase() === cleanName.toLowerCase())) {
           imageFolders.push({
             name: cleanName,
-            entries: []
+            entries: [],
+            promptNote: ""
           });
         }
 
         activeImageFolderName = cleanName;
         autoCaptureFolderName = cleanName;
         renderAutoCaptureFolderSelect();
+        saveImageFolderNames();
         persistSettings(false);
         imageLogView = "folder";
         renderImageLogView();
         appendTerminalLine(`[IMAGE LOG] Active folder: ${cleanName}`);
+      }
+
+      function loadFolderPromptSettings() {
+        const promptMap = getSavedFolderPrompts();
+        for (const folder of imageFolders) {
+          folder.promptNote = canUseFolderPrompt(folder.name)
+            ? (promptMap[folder.name] || "")
+            : "";
+        }
+      }
+
+      function getSavedFolderPrompts() {
+        try {
+          return JSON.parse(localStorage.getItem("pcb-folder-prompts") || "{}");
+        } catch (error) {
+          return {};
+        }
+      }
+
+      function getSavedFolderPrompt(folderName) {
+        if (!canUseFolderPrompt(folderName)) {
+          return "";
+        }
+
+        return getSavedFolderPrompts()[folderName] || "";
+      }
+
+      function saveFolderPrompt(folderName, value) {
+        const folder = getImageFolder(folderName);
+        if (!canUseFolderPrompt(folder.name)) {
+          return;
+        }
+
+        folder.promptNote = value;
+        const promptMap = getSavedFolderPrompts();
+        if (value.trim()) {
+          promptMap[folder.name] = value;
+        } else {
+          delete promptMap[folder.name];
+        }
+        localStorage.setItem("pcb-folder-prompts", JSON.stringify(promptMap));
+        updateFolderPromptButton(folder.name);
+      }
+
+      function getFolderPromptButtonText(folder) {
+        if (activeFolderPromptEditorName === folder.name) {
+          return "Save";
+        }
+
+        return folder.promptNote.trim() ? "Edit Gemini Context" : "Add Gemini Context";
+      }
+
+      function toggleActiveFolderPromptEditor() {
+        toggleFolderPromptEditor(activeImageFolderName);
+      }
+
+      function toggleFolderPromptEditor(folderName) {
+        activeFolderPromptEditorName = activeFolderPromptEditorName === folderName ? null : folderName;
+        renderImageLogPath();
+        renderFolderPromptHeaderButton();
+        const editor = document.getElementById("folder-prompt-note");
+        if (editor) {
+          editor.focus();
+        }
+      }
+
+      function updateFolderPromptButton(folderName) {
+        const button = document.getElementById("folder-prompt-toggle");
+        if (!button || activeImageFolderName !== folderName) {
+          return;
+        }
+
+        button.textContent = getFolderPromptButtonText(getImageFolder(folderName));
+      }
+
+      function renderFolderPromptHeaderButton() {
+        const button = document.getElementById("folder-prompt-toggle");
+        if (!button) {
+          return;
+        }
+
+        const showButton = imageLogView === "folder" && canUseFolderPrompt(activeImageFolderName);
+        button.classList.toggle("hidden", !showButton);
+        if (!showButton) {
+          return;
+        }
+
+        button.textContent = getFolderPromptButtonText(getActiveImageFolder());
+      }
+
+      function canUseFolderPrompt(folderName) {
+        return !PROTECTED_IMAGE_FOLDERS.some((protectedName) => protectedName === folderName);
       }
 
       function canDeleteImageFolder(folderName) {
@@ -1777,6 +1936,13 @@
           URL.revokeObjectURL(entry.url);
           removeFailureCopiesForImage(entry.name, false);
         }
+        if (activeFolderPromptEditorName === folderName) {
+          activeFolderPromptEditorName = null;
+        }
+        const promptMap = getSavedFolderPrompts();
+        delete promptMap[folderName];
+        localStorage.setItem("pcb-folder-prompts", JSON.stringify(promptMap));
+        saveImageFolderNames();
 
         if (activeImageFolderName === folderName) {
           activeImageFolderName = DEFAULT_IMAGE_FOLDER_NAME;
@@ -1828,6 +1994,23 @@
         `).join("");
       }
 
+      function renderFolderContextControl(folder) {
+        if (!canUseFolderPrompt(folder.name)) {
+          return "";
+        }
+
+        const editorOpen = activeFolderPromptEditorName === folder.name;
+        if (!editorOpen) {
+          return "";
+        }
+
+        return `
+          <div class="folder-context-control">
+            <textarea id="folder-prompt-note" class="folder-context-editor" oninput="saveFolderPrompt('${escapeJs(folder.name)}', this.value)" placeholder="Example: J3 and R12 are intentionally unpopulated on this board revision. Hand soldered jumper from TP1 to TP2 is expected.">${escapeHtml(folder.promptNote || "")}</textarea>
+          </div>
+        `;
+      }
+
       async function analyzeImageFromLog(imageName) {
         const folder = getActiveImageFolder();
         const entry = folder.entries.find((candidate) => candidate.name === imageName);
@@ -1837,7 +2020,12 @@
         }
 
         appendTerminalLine(`[GEMINI] manual test for image ${imageName} from ${folder.name}.`);
-        await analyzeBoardImages(imageName, [{ name: imageName, blob: entry.blob }], "IMAGE LOG");
+        await analyzeBoardImages(
+          imageName,
+          [{ name: imageName, blob: entry.blob }],
+          "IMAGE LOG",
+          folder.promptNote || ""
+        );
       }
 
       function openImagePreview(imageName) {
@@ -1880,12 +2068,19 @@
           return;
         }
 
+        const existingControl = path.querySelector(".folder-context-control");
+        if (existingControl) {
+          existingControl.remove();
+        }
+
         if (imageLogView !== "folder") {
           path.classList.remove("active");
           return;
         }
 
         label.textContent = `Image Log / ${activeImageFolderName}`;
+        const folder = getActiveImageFolder();
+        path.insertAdjacentHTML("beforeend", renderFolderContextControl(folder));
         path.classList.add("active");
       }
 
@@ -2324,7 +2519,7 @@
         await analyzeBoardImages(imageName, [{ name: imageName, blob }], "MANUAL");
       }
 
-      async function analyzeBoardImages(boardNumber, capturedImages, source = "AUTO") {
+      async function analyzeBoardImages(boardNumber, capturedImages, source = "AUTO", promptContext = "") {
         if (!capturedImages.length) {
           return null;
         }
@@ -2341,7 +2536,12 @@
           const response = await fetch("/api/analyze-board", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ board: String(boardNumber), source, images })
+            body: JSON.stringify({
+              board: String(boardNumber),
+              source,
+              prompt_context: promptContext,
+              images
+            })
           });
 
           const result = await response.json();
@@ -2664,7 +2864,8 @@
         }
 
         if (shouldAnalyze) {
-          await analyzeBoardImages(boardNumber, capturedImages, logPrefix);
+          const folder = getImageFolder(autoCaptureFolderName);
+          await analyzeBoardImages(boardNumber, capturedImages, logPrefix, folder.promptNote || "");
         } else {
           setMachineStatus("BOARD CAPTURED", "running");
         }
@@ -3814,7 +4015,8 @@
         const imageName = nextCaptureName();
         addImageToLog(blob, imageName, autoCaptureFolderName);
         appendTerminalLine(`[CAPTURE] Image ${imageName} captured for Gemini inspection.`);
-        await analyzeBoardImages(imageName, [{ name: imageName, blob }], "AUTO");
+        const folder = getImageFolder(autoCaptureFolderName);
+        await analyzeBoardImages(imageName, [{ name: imageName, blob }], "AUTO", folder.promptNote || "");
       }
 
       function folderNameForFile(folderName) {

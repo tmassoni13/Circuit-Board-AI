@@ -87,7 +87,7 @@ clear evidence they should be populated.
 """
 
 
-def analyze_pcb_images(images: List[Dict[str, str]]) -> Dict:
+def analyze_pcb_images(images: List[Dict[str, str]], extra_context: str = "") -> Dict:
     """Send board images to Gemini and return a normalized inspection result.
 
     The browser sends already-downscaled JPEG images as base64 strings. The
@@ -110,6 +110,16 @@ def analyze_pcb_images(images: List[Dict[str, str]]) -> Dict:
     )
 
     parts = [{"text": INSPECTION_PROMPT.strip()}]
+    extra_context = str(extra_context or "").strip()
+    if extra_context:
+        parts.append({
+            "text": (
+                "Additional board-specific inspection context from the operator:\n"
+                + extra_context
+                + "\nUse this context to avoid false failures, but still fail any fatal "
+                "defect that would make the board unreliable or nonfunctional."
+            )
+        })
     for image in images:
         name = image.get("name", "unknown")
         mime_type = image.get("mime_type", "image/jpeg")

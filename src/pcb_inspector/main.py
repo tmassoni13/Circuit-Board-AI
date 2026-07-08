@@ -296,7 +296,10 @@ def serve_ui(host: str, port: int, root: Path) -> None:
 
                 from pcb_inspector.gemini_inspection import analyze_pcb_images
 
-                result = analyze_pcb_images(payload.get("images") or [])
+                result = analyze_pcb_images(
+                    payload.get("images") or [],
+                    extra_context=payload.get("prompt_context") or "",
+                )
                 self.send_json(200, result)
             except Exception as error:
                 self.send_json(500, {"error": str(error)})
