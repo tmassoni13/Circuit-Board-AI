@@ -6,7 +6,7 @@ from urllib import request
 from urllib.error import HTTPError, URLError
 
 
-DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 
 INSPECTION_PROMPT = """
