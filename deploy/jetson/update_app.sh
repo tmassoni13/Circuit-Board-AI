@@ -12,6 +12,8 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
 AXIS_SERVICE_NAME="pcb-axis-bridge.service"
 UI_SERVICE_NAME="pcb-inspector-ui.service"
+ENV_PATH="/etc/pcb-inline-inspector.env"
+DEFAULT_GEMINI_MODEL="gemini-3.1-flash-lite"
 
 if [[ -z "${PYTHON_BIN}" ]]; then
   echo "python3 was not found." >&2
@@ -36,6 +38,20 @@ echo "[UPDATE] Refreshing editable Python install..."
 echo "[UPDATE] Ensuring kiosk launcher is executable..."
 chmod +x "${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh"
 chmod +x "${PROJECT_ROOT}/deploy/jetson/update_app.sh"
+
+echo "[UPDATE] Ensuring Gemini model is ${DEFAULT_GEMINI_MODEL}..."
+if [[ -f "${ENV_PATH}" ]]; then
+  if grep -q '^GEMINI_MODEL=' "${ENV_PATH}"; then
+    sudo sed -i "s/^GEMINI_MODEL=.*/GEMINI_MODEL=${DEFAULT_GEMINI_MODEL}/" "${ENV_PATH}"
+  else
+    echo "GEMINI_MODEL=${DEFAULT_GEMINI_MODEL}" | sudo tee -a "${ENV_PATH}" >/dev/null
+  fi
+else
+  sudo tee "${ENV_PATH}" >/dev/null <<ENV
+GEMINI_API_KEY=
+GEMINI_MODEL=${DEFAULT_GEMINI_MODEL}
+ENV
+fi
 
 echo "[UPDATE] Checking UI markers..."
 if grep -n "image-analyze" "${PROJECT_ROOT}/user_interface.html" >/dev/null 2>&1; then

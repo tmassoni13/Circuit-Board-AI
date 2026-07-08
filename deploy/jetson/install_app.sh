@@ -48,7 +48,7 @@ if [[ ! -f "${ENV_PATH}" ]]; then
   echo "[SETUP] Creating ${ENV_PATH}. Add your Gemini API key there before AI inspection."
   sudo tee "${ENV_PATH}" >/dev/null <<ENV
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite
 ENV
 fi
 
