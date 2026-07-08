@@ -37,10 +37,25 @@ joints, leads, pins, and terminals for bridges, opens, cold joints, poor wetting
 excess solder, insufficient solder, lifted leads, solder balls, solder splatter,
 or any connection that looks mechanically or electrically unreliable.
 
-Fail the board if you can see empty component footprints/pads that appear to
-require components. Do not return a good verdict just because the bare PCB is
-undamaged. A good verdict means the visible board area appears fully assembled
-and has no fatal defects.
+Some boards may include manual work, hand soldering, rework, bodge wires,
+jumpers, or other non-automated assembly corrections. Do not fail a board only
+because work appears manual. Instead, verify that the manual work appears
+intentional, electrically connected where needed, mechanically secure, not
+shorting nearby pads/traces, not damaging components, and likely to allow the
+board to operate correctly. Fail manual work only when it looks incorrect,
+unreliable, unsafe, incomplete, or likely to break board function.
+
+Do not automatically fail a board only because some pads or footprints are
+empty. Some pads, optional footprints, test pads, jumpers, programming headers,
+configuration positions, and alternate component locations may intentionally be
+left unpopulated. Inspect every component that does exist and verify that those
+installed parts and solder joints look correct. Fail empty pads/footprints only
+when the image strongly suggests the component is required, the board is clearly
+bare or mostly unpopulated, silkscreen/design context indicates a missing part,
+or the missing population is likely to break board function. Do not return a
+good verdict just because the bare PCB substrate is undamaged. A good verdict
+means the visible installed components and solder joints appear functional and
+there are no fatal defects.
 
 Return only JSON with this shape:
 {
@@ -66,7 +81,9 @@ guessing.
 If the image is not clear enough to inspect, return verdict "bad" and explain
 that the image quality is insufficient. If the board appears bare or mostly
 unpopulated, return verdict "bad" with high confidence and list missing
-components / unpopulated footprints as the fatal defect.
+components / unpopulated footprints as the fatal defect. If only a few pads or
+optional-looking footprints are empty, do not call that fatal unless there is
+clear evidence they should be populated.
 """
 
 
