@@ -10,12 +10,37 @@ DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
 
 
 INSPECTION_PROMPT = """
-You are inspecting PCB images for production defects.
+You are inspecting images from an inline AOI station for assembled PCB boards.
 
-Analyze all provided images as one board inspection. Look for visible fatal
-manufacturing defects such as missing parts, tombstoned parts, shifted parts,
-wrong polarity/orientation, bridged solder, insufficient solder, lifted leads,
-damaged pads, damaged traces, contamination, or obvious physical damage.
+This is not a bare-board quality check. The board is expected to be populated
+with all required components. A board that only has copper pads, solder pads,
+silkscreen outlines, or empty component footprints is a failed assembly even if
+the PCB substrate itself looks clean.
+
+Analyze all provided images as one board inspection. Look for fatal production
+defects such as:
+- missing components on visible footprints or pads
+- a mostly bare or completely bare PCB where components should be installed
+- tombstoned parts
+- shifted, skewed, or misplaced parts
+- wrong polarity/orientation
+- bridged solder
+- insufficient solder
+- lifted leads
+- damaged pads
+- damaged traces
+- contamination
+- obvious physical damage
+
+Soldering defects are a major inspection priority. Carefully check visible pads,
+joints, leads, pins, and terminals for bridges, opens, cold joints, poor wetting,
+excess solder, insufficient solder, lifted leads, solder balls, solder splatter,
+or any connection that looks mechanically or electrically unreliable.
+
+Fail the board if you can see empty component footprints/pads that appear to
+require components. Do not return a good verdict just because the bare PCB is
+undamaged. A good verdict means the visible board area appears fully assembled
+and has no fatal defects.
 
 Return only JSON with this shape:
 {
@@ -33,8 +58,15 @@ Return only JSON with this shape:
   "notes": ["short useful notes"]
 }
 
+For each fatal defect, clearly describe what is wrong and where it appears in
+the image. The app stores failed images with this description for operator
+review, so the reason must be specific enough to understand the failure without
+guessing.
+
 If the image is not clear enough to inspect, return verdict "bad" and explain
-that the image quality is insufficient.
+that the image quality is insufficient. If the board appears bare or mostly
+unpopulated, return verdict "bad" with high confidence and list missing
+components / unpopulated footprints as the fatal defect.
 """
 
 
@@ -139,6 +171,9 @@ def normalize_inspection_result(parsed: Dict, model: str) -> Dict:
     fatal_defects = parsed.get("fatal_defects") or []
     if not isinstance(fatal_defects, list):
         fatal_defects = []
+
+    if fatal_defects:
+        verdict = "bad"
 
     notes = parsed.get("notes") or []
     if not isinstance(notes, list):
