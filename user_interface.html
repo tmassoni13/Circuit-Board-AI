@@ -529,6 +529,16 @@
         padding: 8px;
       }
 
+      .image-log-card.pass {
+        border-color: #0d7f67;
+        box-shadow: inset 0 0 0 2px rgba(13, 127, 103, 0.55);
+      }
+
+      .image-log-card.fail {
+        border-color: #bd2d2d;
+        box-shadow: inset 0 0 0 2px rgba(189, 45, 45, 0.65);
+      }
+
       .image-open-button {
         display: block;
         min-height: 0;
@@ -555,6 +565,12 @@
       .image-log-meta {
         color: #94a3b8;
         font: 11px Consolas, monospace;
+      }
+
+      .image-log-reason {
+        color: #fecaca;
+        font: 11px Consolas, monospace;
+        line-height: 1.3;
       }
 
       .image-delete {
@@ -1158,6 +1174,7 @@
       const SEARCH_OBVIOUS_ALIGNMENT = 0.60;
       const SEARCH_OBVIOUS_GREEN_PIXEL_RATIO = 0.015;
       const DEFAULT_IMAGE_FOLDER_NAME = "Manual Captures";
+      const FAILURE_IMAGE_FOLDER_NAME = "failures";
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -1185,6 +1202,10 @@
       let imageFolders = [
         {
           name: DEFAULT_IMAGE_FOLDER_NAME,
+          entries: []
+        },
+        {
+          name: FAILURE_IMAGE_FOLDER_NAME,
           entries: []
         }
       ];
@@ -1548,6 +1569,7 @@
         renderImageFolders();
         renderImageLog();
         renderImageLogPath();
+        updateInspectionCounters();
       }
 
       function closeImageLog() {
@@ -1586,7 +1608,9 @@
           name: imageName,
           blob,
           url,
-          capturedAt: new Date().toLocaleTimeString()
+          capturedAt: new Date().toLocaleTimeString(),
+          inspectionStatus: null,
+          failureDescription: ""
         };
         getImageFolder(folderName).entries.unshift(entry);
         renderImageLogView();
@@ -1713,12 +1737,13 @@
         }
 
         grid.innerHTML = folder.entries.map((entry) => `
-          <article class="image-log-card">
+          <article class="image-log-card ${entry.inspectionStatus === "pass" ? "pass" : entry.inspectionStatus === "fail" ? "fail" : ""}">
             <button class="image-open-button" type="button" onclick="openImagePreview('${escapeJs(entry.name)}')">
               <img src="${entry.url}" alt="Board image ${entry.name}">
             </button>
             <div class="image-log-name">Image ${entry.name}</div>
             <div class="image-log-meta">${escapeHtml(folder.name)} | ${entry.capturedAt}</div>
+            ${entry.failureDescription ? `<div class="image-log-reason">${escapeHtml(entry.failureDescription)}</div>` : ""}
             <div class="image-log-actions">
               <button class="image-analyze" type="button" onclick="analyzeImageFromLog('${escapeJs(entry.name)}')">Gemini</button>
               <button class="image-delete" type="button" onclick="deleteImageFromLog('${escapeJs(entry.name)}')">Delete</button>
@@ -1764,6 +1789,9 @@
 
         const [entry] = folder.entries.splice(index, 1);
         URL.revokeObjectURL(entry.url);
+        if (folder.name !== FAILURE_IMAGE_FOLDER_NAME) {
+          removeFailureCopiesForImage(imageName);
+        }
         closeImagePreview();
         renderImageLogView();
         appendTerminalLine(`[IMAGE LOG] Deleted image ${imageName} from ${folder.name}.`);
@@ -2245,7 +2273,7 @@
             throw new Error(result.error || `HTTP ${response.status}`);
           }
 
-          recordInspectionResult(boardNumber, result);
+          await recordInspectionResult(boardNumber, result, capturedImages);
           return result;
         } catch (error) {
           appendTerminalLine(`[GEMINI ERROR] board ${boardNumber}: ${error.message}`);
@@ -2314,16 +2342,16 @@
         });
       }
 
-      function recordInspectionResult(boardNumber, result) {
-        const passed = Boolean(result.passed);
-        const confidencePercent = Math.round((Number(result.confidence) || 0) * 100);
+      async function recordInspectionResult(boardNumber, result, capturedImages = []) {
         const defectCount = Array.isArray(result.fatal_defects)
           ? result.fatal_defects.length
           : 0;
+        const passed = Boolean(result.passed) && defectCount === 0;
+        const confidencePercent = Math.round((Number(result.confidence) || 0) * 100);
         const statusText = passed ? "PASS" : "FAIL";
         const summary = result.summary || (passed ? "No fatal defects" : "Fatal defect detected");
 
-        incrementResultCounter(passed ? "passed-count" : "failed-count");
+        markCapturedImages(capturedImages, passed ? "pass" : "fail");
         setMachineStatus(passed ? "BOARD PASSED" : "BOARD FAILED", passed ? "running" : "error");
         appendTerminalLine(
           `[GEMINI RESULT] board ${boardNumber} ${statusText} confidence=${confidencePercent}% fatal_defects=${defectCount} ${summary}`
@@ -2336,12 +2364,146 @@
             );
           });
         }
+
+        if (!passed) {
+          const failureDefects = defectCount > 0
+            ? result.fatal_defects
+            : [{
+                image: capturedImages[0] ? capturedImages[0].name : "",
+                type: "failed inspection",
+                location: "image",
+                reason: summary
+              }];
+          saveFailureImages(boardNumber, capturedImages, failureDefects);
+        }
       }
 
-      function incrementResultCounter(id) {
-        const element = document.getElementById(id);
-        const current = Number(element.textContent) || 0;
-        element.textContent = String(current + 1);
+      function markCapturedImages(capturedImages, inspectionStatus) {
+        for (const image of capturedImages) {
+          const entries = findImageEntriesByName(image.name);
+          for (const entry of entries) {
+            entry.inspectionStatus = inspectionStatus;
+            if (inspectionStatus === "pass") {
+              entry.failureDescription = "";
+              removeFailureCopiesForImage(image.name, false);
+            }
+          }
+        }
+
+        renderImageLogView();
+      }
+
+      function findImageEntriesByName(imageName) {
+        const matches = [];
+        for (const folder of imageFolders) {
+          for (const entry of folder.entries) {
+            if (entry.name === imageName) {
+              matches.push(entry);
+            }
+          }
+        }
+
+        return matches;
+      }
+
+      function saveFailureImages(boardNumber, capturedImages, fatalDefects) {
+        const failureFolder = ensureImageFolder(FAILURE_IMAGE_FOLDER_NAME);
+        const defectsByImage = groupDefectsByImage(capturedImages, fatalDefects);
+
+        for (const image of capturedImages) {
+          const defects = defectsByImage[image.name] || [];
+          if (!defects.length) {
+            continue;
+          }
+
+          const failureName = `${image.name}-failure`;
+          removeFailureCopiesForImage(image.name, false);
+          const entry = addImageToLog(image.blob, failureName, failureFolder.name);
+          entry.inspectionStatus = "fail";
+          entry.failureDescription = failureDescriptionForImage(defects);
+
+          const originalEntries = findImageEntriesByName(image.name);
+          for (const originalEntry of originalEntries) {
+            originalEntry.inspectionStatus = "fail";
+            originalEntry.failureDescription = entry.failureDescription;
+          }
+
+          appendTerminalLine(`[FAILURE IMAGE] saved ${failureFolder.name}/${failureName}: ${entry.failureDescription}`);
+        }
+
+        renderImageLogView();
+      }
+
+      function removeFailureCopiesForImage(imageName, logRemoval = true) {
+        const failureFolder = getImageFolder(FAILURE_IMAGE_FOLDER_NAME);
+        const failureName = `${imageName}-failure`;
+        let removedCount = 0;
+
+        for (let index = failureFolder.entries.length - 1; index >= 0; index -= 1) {
+          const entry = failureFolder.entries[index];
+          if (entry.name !== failureName) {
+            continue;
+          }
+
+          failureFolder.entries.splice(index, 1);
+          URL.revokeObjectURL(entry.url);
+          removedCount += 1;
+        }
+
+        if (removedCount > 0 && logRemoval) {
+          appendTerminalLine(`[IMAGE LOG] Removed ${removedCount} linked failure image(s) for ${imageName}.`);
+        }
+      }
+
+      function groupDefectsByImage(capturedImages, fatalDefects) {
+        const imageNames = capturedImages.map((image) => String(image.name));
+        const groups = {};
+        for (const imageName of imageNames) {
+          groups[imageName] = [];
+        }
+
+        fatalDefects.forEach((defect) => {
+          const defectImage = String(defect.image || "").trim();
+          const matchedName = imageNames.find((name) => name === defectImage) ||
+            imageNames.find((name) => defectImage.includes(name)) ||
+            imageNames[0];
+          if (matchedName) {
+            groups[matchedName].push(defect);
+          }
+        });
+
+        return groups;
+      }
+
+      function failureDescriptionForImage(defects) {
+        return defects.slice(0, 3).map((defect, index) => {
+          const type = defect.type || "fatal defect";
+          const location = defect.location ? ` at ${defect.location}` : "";
+          const reason = defect.reason ? `: ${defect.reason}` : "";
+          return `${index + 1}. ${type}${location}${reason}`;
+        }).join(" | ");
+      }
+
+      function updateInspectionCounters() {
+        let passedImages = 0;
+        let failedImages = 0;
+
+        for (const folder of imageFolders) {
+          if (folder.name === FAILURE_IMAGE_FOLDER_NAME) {
+            continue;
+          }
+
+          for (const entry of folder.entries) {
+            if (entry.inspectionStatus === "pass") {
+              passedImages += 1;
+            } else if (entry.inspectionStatus === "fail") {
+              failedImages += 1;
+            }
+          }
+        }
+
+        document.getElementById("passed-count").textContent = String(passedImages);
+        document.getElementById("failed-count").textContent = String(failedImages);
       }
 
       async function captureBoardImageSet(options = {}) {
