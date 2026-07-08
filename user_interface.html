@@ -460,6 +460,29 @@
         text-align: center;
       }
 
+      .folder-card {
+        position: relative;
+        display: grid;
+        justify-items: center;
+      }
+
+      .folder-delete {
+        position: absolute;
+        top: -2px;
+        right: 2px;
+        display: grid;
+        place-items: center;
+        width: 22px;
+        min-height: 22px;
+        height: 22px;
+        padding: 0;
+        border: 1px solid #7f1d1d;
+        background: #991b1b;
+        color: #ffffff;
+        font-size: 12px;
+        line-height: 1;
+      }
+
       .folder-count {
         color: #94a3b8;
         font-size: 10px;
@@ -1175,6 +1198,7 @@
       const SEARCH_OBVIOUS_GREEN_PIXEL_RATIO = 0.015;
       const DEFAULT_IMAGE_FOLDER_NAME = "Manual Captures";
       const FAILURE_IMAGE_FOLDER_NAME = "failures";
+      const PROTECTED_IMAGE_FOLDERS = [DEFAULT_IMAGE_FOLDER_NAME, FAILURE_IMAGE_FOLDER_NAME];
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -1673,11 +1697,14 @@
 
         grid.classList.remove("hidden");
         grid.innerHTML = imageFolders.map((folder) => `
-          <button class="folder-tile" type="button" onclick="selectImageFolder('${escapeJs(folder.name)}')">
-            <div class="folder-icon"></div>
-            <div>${escapeHtml(folder.name)}</div>
-            <div class="folder-count">${folder.entries.length} images</div>
-          </button>
+          <div class="folder-card">
+            <button class="folder-tile" type="button" onclick="selectImageFolder('${escapeJs(folder.name)}')">
+              <div class="folder-icon"></div>
+              <div>${escapeHtml(folder.name)}</div>
+              <div class="folder-count">${folder.entries.length} images</div>
+            </button>
+            ${canDeleteImageFolder(folder.name) ? `<button class="folder-delete" type="button" onclick="deleteImageFolder('${escapeJs(folder.name)}')" aria-label="Delete folder ${escapeHtml(folder.name)}">X</button>` : ""}
+          </div>
         `).join("") + `
           <button class="folder-tile" type="button" onclick="addImageFolder()" aria-label="Add folder">
             <div class="folder-plus">+</div>
@@ -1716,6 +1743,47 @@
         imageLogView = "folder";
         renderImageLogView();
         appendTerminalLine(`[IMAGE LOG] Active folder: ${cleanName}`);
+      }
+
+      function canDeleteImageFolder(folderName) {
+        return !PROTECTED_IMAGE_FOLDERS.some((protectedName) => protectedName === folderName);
+      }
+
+      function deleteImageFolder(folderName) {
+        if (!canDeleteImageFolder(folderName)) {
+          appendTerminalLine(`[IMAGE LOG] Folder ${folderName} is required and cannot be deleted.`);
+          return;
+        }
+
+        const index = imageFolders.findIndex((folder) => folder.name === folderName);
+        if (index < 0) {
+          return;
+        }
+
+        if (!window.confirm(`Delete folder "${folderName}" and all images inside it?`)) {
+          return;
+        }
+
+        const [folder] = imageFolders.splice(index, 1);
+        for (const entry of folder.entries) {
+          URL.revokeObjectURL(entry.url);
+          removeFailureCopiesForImage(entry.name, false);
+        }
+
+        if (activeImageFolderName === folderName) {
+          activeImageFolderName = DEFAULT_IMAGE_FOLDER_NAME;
+          imageLogView = "folders";
+        }
+
+        if (autoCaptureFolderName === folderName) {
+          autoCaptureFolderName = DEFAULT_IMAGE_FOLDER_NAME;
+          renderAutoCaptureFolderSelect();
+          persistSettings(false);
+        }
+
+        closeImagePreview();
+        renderImageLogView();
+        appendTerminalLine(`[IMAGE LOG] Deleted folder ${folderName}.`);
       }
 
       function renderImageLog() {
