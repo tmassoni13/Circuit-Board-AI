@@ -591,9 +591,17 @@
       }
 
       .image-log-reason {
-        color: #fecaca;
+        color: #cbd5e1;
         font: 11px Consolas, monospace;
         line-height: 1.3;
+      }
+
+      .image-log-card.pass .image-log-reason {
+        color: #99f6e4;
+      }
+
+      .image-log-card.fail .image-log-reason {
+        color: #fecaca;
       }
 
       .image-delete {
@@ -2423,7 +2431,7 @@
         const statusText = passed ? "PASS" : "FAIL";
         const summary = result.summary || (passed ? "No fatal defects" : "Fatal defect detected");
 
-        markCapturedImages(capturedImages, passed ? "pass" : "fail");
+        markCapturedImages(capturedImages, passed ? "pass" : "fail", summary);
         setMachineStatus(passed ? "BOARD PASSED" : "BOARD FAILED", passed ? "running" : "error");
         appendTerminalLine(
           `[GEMINI RESULT] board ${boardNumber} ${statusText} confidence=${confidencePercent}% fatal_defects=${defectCount} ${summary}`
@@ -2450,13 +2458,13 @@
         }
       }
 
-      function markCapturedImages(capturedImages, inspectionStatus) {
+      function markCapturedImages(capturedImages, inspectionStatus, description = "") {
         for (const image of capturedImages) {
           const entries = findImageEntriesByName(image.name);
           for (const entry of entries) {
             entry.inspectionStatus = inspectionStatus;
+            entry.failureDescription = description;
             if (inspectionStatus === "pass") {
-              entry.failureDescription = "";
               removeFailureCopiesForImage(image.name, false);
             }
           }
