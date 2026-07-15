@@ -14,6 +14,13 @@ AXIS_SERVICE_NAME="pcb-axis-bridge.service"
 UI_SERVICE_NAME="pcb-inspector-ui.service"
 ENV_PATH="/etc/pcb-inline-inspector.env"
 DEFAULT_GEMINI_MODEL="gemini-3.1-flash-lite"
+DESKTOP_DIR="${DESKTOP_DIR:-${HOME}/Desktop}"
+if command -v xdg-user-dir >/dev/null 2>&1; then
+  DESKTOP_DIR="$(xdg-user-dir DESKTOP)"
+fi
+APP_DESKTOP_PATH="${DESKTOP_DIR}/pcb-inline-inspector.desktop"
+UPDATE_DESKTOP_PATH="${DESKTOP_DIR}/update-pcb-inline-inspector.desktop"
+ICON_PATH="${PROJECT_ROOT}/assets/xadite-logo.png"
 
 if [[ -z "${PYTHON_BIN}" ]]; then
   echo "python3 was not found." >&2
@@ -38,6 +45,37 @@ echo "[UPDATE] Refreshing editable Python install..."
 echo "[UPDATE] Ensuring kiosk launcher is executable..."
 chmod +x "${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh"
 chmod +x "${PROJECT_ROOT}/deploy/jetson/update_app.sh"
+chmod +x "${PROJECT_ROOT}/deploy/jetson/run_update.sh"
+
+echo "[UPDATE] Refreshing desktop launchers..."
+mkdir -p "${DESKTOP_DIR}"
+cat > "${APP_DESKTOP_PATH}" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=PCB Inline Inspector
+Comment=Open the PCB Inline Inspector app
+Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
+Icon=${ICON_PATH}
+Terminal=false
+Categories=Utility;
+DESKTOP
+
+cat > "${UPDATE_DESKTOP_PATH}" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Update PCB Inspector
+Comment=Pull the newest app from GitHub and restart services
+Exec=${PROJECT_ROOT}/deploy/jetson/run_update.sh
+Icon=${ICON_PATH}
+Terminal=true
+Categories=Utility;
+DESKTOP
+
+chmod +x "${APP_DESKTOP_PATH}" "${UPDATE_DESKTOP_PATH}"
+if command -v gio >/dev/null 2>&1; then
+  gio set "${APP_DESKTOP_PATH}" metadata::trusted true >/dev/null 2>&1 || true
+  gio set "${UPDATE_DESKTOP_PATH}" metadata::trusted true >/dev/null 2>&1 || true
+fi
 
 echo "[UPDATE] Ensuring Gemini model is ${DEFAULT_GEMINI_MODEL}..."
 if [[ -f "${ENV_PATH}" ]]; then

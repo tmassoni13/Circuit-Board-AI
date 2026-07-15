@@ -27,9 +27,13 @@ UI_SERVICE_PATH="/etc/systemd/system/${UI_SERVICE_NAME}"
 ENV_PATH="/etc/pcb-inline-inspector.env"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 AUTOSTART_PATH="${AUTOSTART_DIR}/pcb-inline-inspector.desktop"
-DESKTOP_DIR="${HOME}/Desktop"
+DESKTOP_DIR="${DESKTOP_DIR:-${HOME}/Desktop}"
+if command -v xdg-user-dir >/dev/null 2>&1; then
+  DESKTOP_DIR="$(xdg-user-dir DESKTOP)"
+fi
 APP_DESKTOP_PATH="${DESKTOP_DIR}/pcb-inline-inspector.desktop"
 UPDATE_DESKTOP_PATH="${DESKTOP_DIR}/update-pcb-inline-inspector.desktop"
+ICON_PATH="${PROJECT_ROOT}/assets/xadite-logo.png"
 
 if [[ -z "${PYTHON_BIN}" ]]; then
   echo "python3 was not found. Install Python 3 before installing the app." >&2
@@ -112,6 +116,7 @@ Type=Application
 Name=PCB Inline Inspector
 Comment=Open PCB Inline Inspector kiosk UI
 Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
+Icon=${ICON_PATH}
 Terminal=false
 X-GNOME-Autostart-enabled=true
 DESKTOP
@@ -124,6 +129,7 @@ Type=Application
 Name=PCB Inline Inspector
 Comment=Open the PCB Inline Inspector app
 Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
+Icon=${ICON_PATH}
 Terminal=false
 Categories=Utility;
 DESKTOP
@@ -134,11 +140,16 @@ Type=Application
 Name=Update PCB Inspector
 Comment=Pull the newest app from GitHub and restart services
 Exec=${PROJECT_ROOT}/deploy/jetson/run_update.sh
+Icon=${ICON_PATH}
 Terminal=true
 Categories=Utility;
 DESKTOP
 
 chmod +x "${APP_DESKTOP_PATH}" "${UPDATE_DESKTOP_PATH}"
+if command -v gio >/dev/null 2>&1; then
+  gio set "${APP_DESKTOP_PATH}" metadata::trusted true >/dev/null 2>&1 || true
+  gio set "${UPDATE_DESKTOP_PATH}" metadata::trusted true >/dev/null 2>&1 || true
+fi
 
 echo "[SETUP] Enabling services..."
 sudo systemctl daemon-reload
