@@ -1068,11 +1068,7 @@
             </div>
           </div>
           <div class="topbar-actions">
-            <button class="capture-button" type="button" onclick="connectAxis()">Connect Axis</button>
-            <button class="capture-button" type="button" onclick="testAxisMove()">Test Axis</button>
-            <button class="capture-button" type="button" onclick="testCapturePositions()">Test Capture</button>
-            <button class="capture-button" type="button" onclick="setAxisZero()">Set Zero</button>
-            <button class="capture-button" type="button" onclick="captureStillImage()">Capture</button>
+            <button class="capture-button" type="button" onclick="captureStillImage()">Manual Capture</button>
             <div class="topbar-meta" id="camera-meta">ELP USB Camera | Test Mode</div>
           </div>
         </div>
@@ -1191,7 +1187,6 @@
       const CAPTURE_CORNER_MM_PER_OFFSET = 160;
       const CAPTURE_CORNER_SETTLE_MS = 500;
       const CAPTURE_BOTTOM_SIGN_Y = 1;
-      const AUTO_CAPTURE_ENABLED = false;
       const AXIS_AUTO_ALIGN_ENABLED = true;
       const AXIS_BRIDGE_URL = "http://127.0.0.1:8765";
       const AXIS_FEED_MM_MIN = 6000;
@@ -1279,6 +1274,7 @@
       let boardInRange = false;
       let pendingBoardBox = null;
       let boardWorkflowInProgress = false;
+      let waitingForNextBoard = false;
 
       function setMachineStatus(value, state = "idle") {
         const status = document.querySelector(".status");
@@ -3021,6 +3017,7 @@
         boardInRange = false;
         pendingBoardBox = null;
         boardWorkflowInProgress = false;
+        waitingForNextBoard = false;
         lastBoardBox = null;
         capturedCurrentBoard = false;
         smoothedAxisOffsetX = 0;
@@ -3042,6 +3039,7 @@
         boardInRange = false;
         pendingBoardBox = null;
         boardWorkflowInProgress = false;
+        waitingForNextBoard = false;
         lastBoardBox = null;
         capturedCurrentBoard = false;
         smoothedAxisOffsetX = 0;
@@ -3067,12 +3065,15 @@
           stableBoardFrames = 0;
           boardInRange = false;
           pendingBoardBox = null;
-          boardWorkflowInProgress = false;
           lastBoardBox = null;
           clearBoardOverlay();
 
-          if (missingBoardFrames >= BOARD_LEAVE_FRAME_COUNT) {
+          if (missingBoardFrames >= BOARD_LEAVE_FRAME_COUNT && !boardWorkflowInProgress) {
+            if (capturedCurrentBoard || waitingForNextBoard) {
+              appendTerminalLine("[BOARD] Previous board cleared. Ready for next board.");
+            }
             capturedCurrentBoard = false;
+            waitingForNextBoard = false;
             smoothedAxisOffsetX = 0;
             smoothedAxisOffsetY = 0;
             setMachineStatus("WAITING FOR BOARD", "searching");
@@ -3111,6 +3112,16 @@
         const displayBoard = smoothedBoardOverlay(board);
         lastBoardBox = displayBoard;
         drawBoardOverlay(displayBoard, true);
+
+        if (boardWorkflowInProgress) {
+          return;
+        }
+
+        if (capturedCurrentBoard || waitingForNextBoard) {
+          setMachineStatus("WAITING FOR NEXT BOARD", "searching");
+          return;
+        }
+
         setMachineStatus("BOARD IN RANGE", "running");
         beginBoardWorkflow(displayBoard);
       }
@@ -3143,34 +3154,34 @@
         const settings = readBoardSettings();
         const capturePlan = buildBoardCapturePlan(settings);
         boardWorkflowInProgress = true;
+        capturedCurrentBoard = true;
 
-        if (!capturePlan.requiresAxisTravel) {
-          appendTerminalLine("[BOARD] board fits inside FOV. Holding X0 Y0 for single image.");
-          capturedCurrentBoard = true;
-
-          if (AUTO_CAPTURE_ENABLED) {
+        try {
+          if (!capturePlan.requiresAxisTravel) {
+            appendTerminalLine("[BOARD] board fits inside FOV. Holding X0 Y0 for single image.");
             await captureBoardImageSet();
-          } else {
-            setMachineStatus("BOARD READY", "running");
+            waitingForNextBoard = true;
+            setMachineStatus("WAITING FOR NEXT BOARD", "searching");
+            appendTerminalLine("[BOARD] Capture complete. Waiting for this board to leave before next capture.");
+            return;
           }
 
+          appendTerminalLine(
+            `[BOARD] large board requires ${capturePlan.columns}x${capturePlan.rows} capture plan. Starting camera corner alignment.`
+          );
+          setMachineStatus("ALIGNING CORNER", "searching");
+
+          await captureBoardImageSet({
+            requireMachineRunning: true,
+            logPrefix: "AUTO CAPTURE",
+            alignFromCamera: true
+          });
+          waitingForNextBoard = true;
+          setMachineStatus("WAITING FOR NEXT BOARD", "searching");
+          appendTerminalLine("[BOARD] Capture route complete. Waiting for this board to leave before next capture.");
+        } finally {
           boardWorkflowInProgress = false;
-          return;
         }
-
-        appendTerminalLine(
-          `[BOARD] large board requires ${capturePlan.columns}x${capturePlan.rows} capture plan. Starting camera corner alignment.`
-        );
-        capturedCurrentBoard = true;
-        setMachineStatus("ALIGNING CORNER", "searching");
-
-        await captureBoardImageSet({
-          requireMachineRunning: true,
-          logPrefix: "AUTO CAPTURE",
-          alignFromCamera: true
-        });
-
-        boardWorkflowInProgress = false;
       }
 
       function smoothedBoardOverlay(board) {
