@@ -1391,6 +1391,7 @@
           autoCaptureFolderName = folderSelect.value || DEFAULT_IMAGE_FOLDER_NAME;
         }
         persistSettings(false);
+        updateInspectionCounters();
       }
 
       function persistSettings(writeLog) {
@@ -2763,12 +2764,9 @@
       function updateInspectionCounters() {
         let passedImages = 0;
         let failedImages = 0;
+        const folder = getImageFolder(autoCaptureFolderName);
 
-        for (const folder of imageFolders) {
-          if (folder.name === FAILURE_IMAGE_FOLDER_NAME) {
-            continue;
-          }
-
+        if (folder.name !== FAILURE_IMAGE_FOLDER_NAME) {
           for (const entry of folder.entries) {
             if (entry.inspectionStatus === "pass") {
               passedImages += 1;
