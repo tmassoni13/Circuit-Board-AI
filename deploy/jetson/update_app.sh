@@ -14,6 +14,8 @@ AXIS_SERVICE_NAME="pcb-axis-bridge.service"
 UI_SERVICE_NAME="pcb-inspector-ui.service"
 ENV_PATH="/etc/pcb-inline-inspector.env"
 DEFAULT_GEMINI_MODEL="gemini-3.1-flash-lite"
+AUTOSTART_DIR="${HOME}/.config/autostart"
+AUTOSTART_PATH="${AUTOSTART_DIR}/pcb-inline-inspector.desktop"
 DESKTOP_DIR="${DESKTOP_DIR:-${HOME}/Desktop}"
 if command -v xdg-user-dir >/dev/null 2>&1; then
   DESKTOP_DIR="$(xdg-user-dir DESKTOP)"
@@ -48,12 +50,14 @@ chmod +x "${PROJECT_ROOT}/deploy/jetson/update_app.sh"
 chmod +x "${PROJECT_ROOT}/deploy/jetson/run_update.sh"
 
 echo "[UPDATE] Refreshing desktop launchers..."
+mkdir -p "${AUTOSTART_DIR}"
+rm -f "${AUTOSTART_PATH}"
 mkdir -p "${DESKTOP_DIR}"
 cat > "${APP_DESKTOP_PATH}" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=PCB Inline Inspector
-Comment=Open the PCB Inline Inspector app
+Name=PCB AI
+Comment=Open the PCB AI app
 Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
 Icon=${ICON_PATH}
 Terminal=false
@@ -63,7 +67,7 @@ DESKTOP
 cat > "${UPDATE_DESKTOP_PATH}" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=Update PCB Inspector
+Name=Update PCB AI
 Comment=Pull the newest app from GitHub and restart services
 Exec=${PROJECT_ROOT}/deploy/jetson/run_update.sh
 Icon=${ICON_PATH}
@@ -108,4 +112,4 @@ echo "[UPDATE] UI service status:"
 sudo systemctl --no-pager --lines=5 status "${UI_SERVICE_NAME}" || true
 
 echo "[UPDATE] Done."
-echo "[UPDATE] Open the desktop icon named 'PCB Inline Inspector' or reboot the Jetson."
+echo "[UPDATE] Open the desktop icon named 'PCB AI' to launch the app."

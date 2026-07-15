@@ -7,7 +7,7 @@ set -euo pipefail
 # - editable Python package from this Git checkout
 # - automatic GRBL axis bridge service on port 8765
 # - automatic UI server service on port 5500
-# - desktop autostart entry that opens Chromium kiosk mode
+# - clickable desktop launchers for the app and updater
 #
 # Normal use:
 #
@@ -15,7 +15,7 @@ set -euo pipefail
 #   cd Circuit-Board-AI
 #   bash deploy/jetson/install_app.sh
 #
-# After that, reboot the Jetson. The app should come up on the HDMI display.
+# After that, open the app from the desktop icon.
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
@@ -105,29 +105,20 @@ RestartSec=2
 WantedBy=multi-user.target
 SERVICE
 
-echo "[SETUP] Installing desktop kiosk autostart..."
+echo "[SETUP] Removing old desktop kiosk autostart if present..."
 chmod +x "${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh"
 chmod +x "${PROJECT_ROOT}/deploy/jetson/update_app.sh"
 chmod +x "${PROJECT_ROOT}/deploy/jetson/run_update.sh"
 mkdir -p "${AUTOSTART_DIR}"
-cat > "${AUTOSTART_PATH}" <<DESKTOP
-[Desktop Entry]
-Type=Application
-Name=PCB Inline Inspector
-Comment=Open PCB Inline Inspector kiosk UI
-Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
-Icon=${ICON_PATH}
-Terminal=false
-X-GNOME-Autostart-enabled=true
-DESKTOP
+rm -f "${AUTOSTART_PATH}"
 
 echo "[SETUP] Installing clickable desktop launchers..."
 mkdir -p "${DESKTOP_DIR}"
 cat > "${APP_DESKTOP_PATH}" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=PCB Inline Inspector
-Comment=Open the PCB Inline Inspector app
+Name=PCB AI
+Comment=Open the PCB AI app
 Exec=${PROJECT_ROOT}/deploy/jetson/launch_kiosk.sh
 Icon=${ICON_PATH}
 Terminal=false
@@ -137,7 +128,7 @@ DESKTOP
 cat > "${UPDATE_DESKTOP_PATH}" <<DESKTOP
 [Desktop Entry]
 Type=Application
-Name=Update PCB Inspector
+Name=Update PCB AI
 Comment=Pull the newest app from GitHub and restart services
 Exec=${PROJECT_ROOT}/deploy/jetson/run_update.sh
 Icon=${ICON_PATH}
@@ -159,8 +150,7 @@ sudo systemctl restart "${AXIS_SERVICE_NAME}"
 sudo systemctl restart "${UI_SERVICE_NAME}"
 
 echo "[SETUP] Install complete."
-echo "[SETUP] Reboot the Jetson once before production use:"
-echo "        sudo reboot"
+echo "[SETUP] Open the desktop icon named 'PCB AI' to launch the app."
 echo
 echo "[SETUP] Service status:"
 echo "        sudo systemctl status ${AXIS_SERVICE_NAME}"

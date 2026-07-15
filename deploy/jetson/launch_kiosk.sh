@@ -3,9 +3,8 @@ set -euo pipefail
 
 # Launch the PCB Inline Inspector UI on the Jetson HDMI display.
 #
-# This script is used by the desktop autostart entry created by
-# `install_app.sh`. It waits for the local UI server, then opens Chromium in
-# kiosk mode pointed at the app.
+# This script is used by the clickable desktop launcher. It waits for the local
+# UI server, then opens Chromium in kiosk mode pointed at the app.
 
 BASE_APP_URL="${APP_URL:-http://127.0.0.1:5500/user_interface.html}"
 APP_URL="${BASE_APP_URL}?v=$(date +%s)"
