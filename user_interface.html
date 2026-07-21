@@ -158,6 +158,40 @@
         align-items: end;
       }
 
+      .relay-grid {
+        display: grid;
+        gap: 8px;
+        max-width: 520px;
+      }
+
+      .relay-row {
+        display: grid;
+        grid-template-columns: 76px minmax(120px, 1fr);
+        gap: 8px;
+        align-items: center;
+      }
+
+      .relay-label {
+        color: #bfdbfe;
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .relay-on {
+        border-color: #0d7f67;
+        background: #0d7f67;
+      }
+
+      .relay-off {
+        border-color: #a11d1d;
+        background: #921a1a;
+      }
+
+      .relay-toggle {
+        min-height: 36px;
+      }
+
       .color-swatch input {
         width: 42px;
         height: 42px;
@@ -1120,9 +1154,6 @@
                         <input id="camera-fov-height-mm" type="number" min="10" max="500" step="1" value="140" oninput="autoApplySettings()" onblur="autoApplySettings()">
                       </div>
                     </div>
-                    <div class="settings-actions">
-                      <button type="button" onclick="resetSettingsToDefaults()">Reset Defaults</button>
-                    </div>
                   </div>
 
                   <div class="settings-group">
@@ -1133,6 +1164,33 @@
                         <select id="auto-capture-folder" onchange="autoApplySettings()"></select>
                       </div>
                     </div>
+                  </div>
+
+                  <div class="settings-group">
+                    <div class="settings-section-title">Conveyor Relay Test</div>
+                    <div class="relay-grid">
+                      <div class="relay-row">
+                        <div class="relay-label">CH1 P35</div>
+                        <button id="relay-toggle-1" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(1)">Off</button>
+                      </div>
+                      <div class="relay-row">
+                        <div class="relay-label">CH2 P33</div>
+                        <button id="relay-toggle-2" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(2)">Off</button>
+                      </div>
+                      <div class="relay-row">
+                        <div class="relay-label">CH3 P31</div>
+                        <button id="relay-toggle-3" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(3)">Off</button>
+                      </div>
+                      <div class="relay-row">
+                        <div class="relay-label">CH4 P29</div>
+                        <button id="relay-toggle-4" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(4)">Off</button>
+                      </div>
+                      <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
+                    </div>
+                  </div>
+
+                  <div class="settings-actions">
+                    <button type="button" onclick="resetSettingsToDefaults()">Reset Defaults</button>
                   </div>
                 </section>
               </section>
@@ -1228,6 +1286,7 @@
       const DEFAULT_IMAGE_FOLDER_NAME = "Manual Captures";
       const FAILURE_IMAGE_FOLDER_NAME = "failures";
       const PROTECTED_IMAGE_FOLDERS = [DEFAULT_IMAGE_FOLDER_NAME, FAILURE_IMAGE_FOLDER_NAME];
+      const CONVEYOR_RELAY_CHANNELS = [1, 2, 3, 4];
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -1275,6 +1334,12 @@
       let pendingBoardBox = null;
       let boardWorkflowInProgress = false;
       let waitingForNextBoard = false;
+      let relayStates = {
+        1: false,
+        2: false,
+        3: false,
+        4: false
+      };
 
       function setMachineStatus(value, state = "idle") {
         const status = document.querySelector(".status");
@@ -2182,6 +2247,63 @@
         const terminal = document.getElementById("terminal-log");
         terminal.textContent = `${terminal.textContent.trimEnd()}\n${line}`;
         terminal.scrollTop = terminal.scrollHeight;
+      }
+
+      function updateConveyorRelayButtons(states = relayStates) {
+        for (const channel of CONVEYOR_RELAY_CHANNELS) {
+          const button = document.getElementById(`relay-toggle-${channel}`);
+          if (!button) {
+            continue;
+          }
+
+          const isOn = Boolean(states[channel] || states[String(channel)]);
+          relayStates[channel] = isOn;
+          button.textContent = isOn ? "On" : "Off";
+          button.classList.toggle("relay-on", isOn);
+          button.classList.toggle("relay-off", !isOn);
+        }
+      }
+
+      async function toggleConveyorRelay(channel) {
+        await setConveyorRelay(channel, !relayStates[channel]);
+      }
+
+      async function setConveyorRelay(channel, state) {
+        try {
+          const response = await fetch("/api/conveyor-relay", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channel, state })
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+
+          updateConveyorRelayButtons(payload.states || {});
+          appendTerminalLine(`[CONVEYOR] CH${channel} pin ${payload.pins[channel]} ${state ? "ON" : "OFF"}.`);
+        } catch (error) {
+          appendTerminalLine(`[CONVEYOR ERROR] CH${channel}: ${error.message}`);
+        }
+      }
+
+      async function allConveyorRelaysOff() {
+        try {
+          const response = await fetch("/api/conveyor-relay-all-off", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}"
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+
+          updateConveyorRelayButtons(payload.states || {});
+          appendTerminalLine("[CONVEYOR] All relay channels OFF.");
+        } catch (error) {
+          appendTerminalLine(`[CONVEYOR ERROR] all off failed: ${error.message}`);
+        }
       }
 
       async function stopExistingPreview(video) {

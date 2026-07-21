@@ -14,6 +14,89 @@ from pcb_inspector.laser_engraver import (
     write_gcode_file,
 )
 
+CONVEYOR_RELAY_PINS = {
+    1: 35,
+    2: 33,
+    3: 31,
+    4: 29,
+}
+
+
+class ConveyorRelayController:
+    """Small Jetson GPIO adapter for the conveyor relay test outputs.
+
+    The relay inputs are wired to Jetson Nano physical header pins, so this
+    class deliberately uses GPIO.BOARD numbering instead of Broadcom/SoC names.
+    ON currently means the pin is driven HIGH and OFF means it is driven LOW.
+    If the installed relay board is active-low, the operator will see inverted
+    behavior during test and we can flip `active_low` in one place.
+    """
+
+    def __init__(self, active_low=False):
+        self.active_low = active_low
+        self._gpio = None
+        self._initialized = False
+        self._states = {channel: False for channel in CONVEYOR_RELAY_PINS}
+
+    def _load_gpio(self):
+        if self._gpio is not None:
+            return self._gpio
+
+        try:
+            import Jetson.GPIO as GPIO
+        except Exception as error:
+            raise RuntimeError(
+                "Jetson.GPIO is not available. Install/run this on the Jetson Nano to control the conveyor relay."
+            ) from error
+
+        self._gpio = GPIO
+        return GPIO
+
+    def _ensure_initialized(self):
+        if self._initialized:
+            return
+
+        GPIO = self._load_gpio()
+        GPIO.setwarnings(False)
+        GPIO.setmode(GPIO.BOARD)
+        off_level = GPIO.HIGH if self.active_low else GPIO.LOW
+        for pin in CONVEYOR_RELAY_PINS.values():
+            GPIO.setup(pin, GPIO.OUT, initial=off_level)
+        self._initialized = True
+
+    def set_channel(self, channel, enabled):
+        if channel not in CONVEYOR_RELAY_PINS:
+            raise ValueError("Relay channel must be 1, 2, 3, or 4.")
+
+        self._ensure_initialized()
+        GPIO = self._load_gpio()
+        pin = CONVEYOR_RELAY_PINS[channel]
+        if self.active_low:
+            level = GPIO.LOW if enabled else GPIO.HIGH
+        else:
+            level = GPIO.HIGH if enabled else GPIO.LOW
+
+        GPIO.output(pin, level)
+        self._states[channel] = bool(enabled)
+        return self.status()
+
+    def all_off(self):
+        self._ensure_initialized()
+        for channel in CONVEYOR_RELAY_PINS:
+            self.set_channel(channel, False)
+        return self.status()
+
+    def status(self):
+        return {
+            "pins": CONVEYOR_RELAY_PINS,
+            "active_low": self.active_low,
+            "states": self._states,
+            "initialized": self._initialized,
+        }
+
+
+CONVEYOR_RELAYS = ConveyorRelayController()
+
 
 def test_axis(
     port: str,
@@ -285,7 +368,8 @@ def serve_ui(host: str, port: int, root: Path) -> None:
             SimpleHTTPRequestHandler.end_headers(self)
 
         def do_POST(self):
-            if self.path != "/api/analyze-board":
+            endpoint = self.path.split("?", 1)[0]
+            if endpoint not in {"/api/analyze-board", "/api/conveyor-relay", "/api/conveyor-relay-all-off"}:
                 self.send_error(404, "Unknown endpoint")
                 return
 
@@ -294,15 +378,35 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                 raw_body = self.rfile.read(content_length).decode("utf-8")
                 payload = json.loads(raw_body or "{}")
 
-                from pcb_inspector.gemini_inspection import analyze_pcb_images
+                if endpoint == "/api/analyze-board":
+                    from pcb_inspector.gemini_inspection import analyze_pcb_images
 
-                result = analyze_pcb_images(
-                    payload.get("images") or [],
-                    extra_context=payload.get("prompt_context") or "",
-                )
-                self.send_json(200, result)
+                    result = analyze_pcb_images(
+                        payload.get("images") or [],
+                        extra_context=payload.get("prompt_context") or "",
+                    )
+                    self.send_json(200, result)
+                    return
+
+                if endpoint == "/api/conveyor-relay":
+                    channel = int(payload.get("channel"))
+                    state = bool(payload.get("state"))
+                    self.send_json(200, CONVEYOR_RELAYS.set_channel(channel, state))
+                    return
+
+                if endpoint == "/api/conveyor-relay-all-off":
+                    self.send_json(200, CONVEYOR_RELAYS.all_off())
+                    return
             except Exception as error:
                 self.send_json(500, {"error": str(error)})
+
+        def do_GET(self):
+            endpoint = self.path.split("?", 1)[0]
+            if endpoint == "/api/conveyor-relay-status":
+                self.send_json(200, CONVEYOR_RELAYS.status())
+                return
+
+            SimpleHTTPRequestHandler.do_GET(self)
 
         def send_json(self, status_code, payload):
             body = json.dumps(payload).encode("utf-8")
