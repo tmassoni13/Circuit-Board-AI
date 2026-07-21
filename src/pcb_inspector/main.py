@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from socketserver import ThreadingMixIn
@@ -14,29 +15,50 @@ from pcb_inspector.laser_engraver import (
     write_gcode_file,
 )
 
-CONVEYOR_RELAY_PINS = {
+CONVEYOR_RELAY_OUTPUT_PINS = {
     1: 35,
     2: 33,
-    3: 31,
-    4: 29,
+}
+CONVEYOR_SENSOR_INPUT_PINS = {
+    1: 31,
+    2: 29,
+    3: 27,
+}
+# Polarized retroreflective board detection watches a reflector beam. A board is
+# present when the beam is blocked. With an NPN open-collector output pulled up
+# to Jetson-safe 3.3 V, active output normally reads LOW, so the default is
+# active-low. If the physical sensor is set to Light-ON instead of Dark-ON and
+# the UI reads backward, flip this one value.
+CONVEYOR_SENSOR_ACTIVE_LOW = True
+CONVEYOR_DIRECTION_INTERLOCKS = {
+    1: 2,
+    2: 1,
 }
 
 
-class ConveyorRelayController:
-    """Small Jetson GPIO adapter for the conveyor relay test outputs.
+class ConveyorIoController:
+    """Small Jetson GPIO adapter for conveyor motor outputs and board sensors.
 
-    The relay inputs are wired to Jetson Nano physical header pins, so this
-    class deliberately uses GPIO.BOARD numbering instead of Broadcom/SoC names.
-    ON currently means the pin is driven HIGH and OFF means it is driven LOW.
-    If the installed relay board is active-low, the operator will see inverted
-    behavior during test and we can flip `active_low` in one place.
+    This class uses GPIO.BOARD numbering because the hardware plan is written
+    in physical Jetson Nano header pin numbers:
+
+    - pin 35: conveyor forward relay output
+    - pin 33: conveyor reverse relay output
+    - pin 31: start optical sensor
+    - pin 29: end optical sensor
+    - pin 27: imaging optical sensor under the camera
+
+    Relay ON currently means the output pin is driven HIGH. If the installed
+    relay board is active-low, flip `relay_active_low` in one place.
     """
 
-    def __init__(self, active_low=False):
-        self.active_low = active_low
+    def __init__(self, relay_active_low=False, sensor_active_low=CONVEYOR_SENSOR_ACTIVE_LOW):
+        self.relay_active_low = relay_active_low
+        self.sensor_active_low = sensor_active_low
         self._gpio = None
         self._initialized = False
-        self._states = {channel: False for channel in CONVEYOR_RELAY_PINS}
+        self._relay_states = {channel: False for channel in CONVEYOR_RELAY_OUTPUT_PINS}
+        self._lock = threading.RLock()
 
     def _load_gpio(self):
         if self._gpio is not None:
@@ -59,43 +81,71 @@ class ConveyorRelayController:
         GPIO = self._load_gpio()
         GPIO.setwarnings(False)
         GPIO.setmode(GPIO.BOARD)
-        off_level = GPIO.HIGH if self.active_low else GPIO.LOW
-        for pin in CONVEYOR_RELAY_PINS.values():
+        off_level = GPIO.HIGH if self.relay_active_low else GPIO.LOW
+        for pin in CONVEYOR_RELAY_OUTPUT_PINS.values():
             GPIO.setup(pin, GPIO.OUT, initial=off_level)
+        for pin in CONVEYOR_SENSOR_INPUT_PINS.values():
+            GPIO.setup(pin, GPIO.IN)
         self._initialized = True
 
     def set_channel(self, channel, enabled):
-        if channel not in CONVEYOR_RELAY_PINS:
-            raise ValueError("Relay channel must be 1, 2, 3, or 4.")
+        if channel not in CONVEYOR_RELAY_OUTPUT_PINS:
+            raise ValueError("Relay channel must be 1 or 2.")
 
-        self._ensure_initialized()
+        with self._lock:
+            self._ensure_initialized()
+            if enabled and channel in CONVEYOR_DIRECTION_INTERLOCKS:
+                # CH1 is conveyor forward and CH2 is conveyor reverse. These
+                # outputs must never be energized together because that can
+                # short or fight the motor controller direction circuit.
+                self._set_channel_unlocked(CONVEYOR_DIRECTION_INTERLOCKS[channel], False)
+            self._set_channel_unlocked(channel, enabled)
+            return self.status()
+
+    def _set_channel_unlocked(self, channel, enabled):
         GPIO = self._load_gpio()
-        pin = CONVEYOR_RELAY_PINS[channel]
-        if self.active_low:
+        pin = CONVEYOR_RELAY_OUTPUT_PINS[channel]
+        if self.relay_active_low:
             level = GPIO.LOW if enabled else GPIO.HIGH
         else:
             level = GPIO.HIGH if enabled else GPIO.LOW
 
         GPIO.output(pin, level)
-        self._states[channel] = bool(enabled)
-        return self.status()
+        self._relay_states[channel] = bool(enabled)
 
     def all_off(self):
+        with self._lock:
+            self._ensure_initialized()
+            for channel in CONVEYOR_RELAY_OUTPUT_PINS:
+                self._set_channel_unlocked(channel, False)
+            return self.status()
+
+    def read_sensors(self):
         self._ensure_initialized()
-        for channel in CONVEYOR_RELAY_PINS:
-            self.set_channel(channel, False)
-        return self.status()
+        GPIO = self._load_gpio()
+        sensor_states = {}
+        for sensor, pin in CONVEYOR_SENSOR_INPUT_PINS.items():
+            raw_high = GPIO.input(pin) == GPIO.HIGH
+            # Return logical board detection, not raw electrical level:
+            # True means the reflector beam is blocked by a board.
+            sensor_states[sensor] = (not raw_high) if self.sensor_active_low else raw_high
+        return sensor_states
 
     def status(self):
+        sensor_states = self.read_sensors()
         return {
-            "pins": CONVEYOR_RELAY_PINS,
-            "active_low": self.active_low,
-            "states": self._states,
+            "relay_pins": CONVEYOR_RELAY_OUTPUT_PINS,
+            "sensor_pins": CONVEYOR_SENSOR_INPUT_PINS,
+            "relay_active_low": self.relay_active_low,
+            "sensor_active_low": self.sensor_active_low,
+            "states": self._relay_states,
+            "sensors": sensor_states,
+            "sensor_meaning": "true means polarized retroreflective beam is blocked by a board",
             "initialized": self._initialized,
         }
 
 
-CONVEYOR_RELAYS = ConveyorRelayController()
+CONVEYOR_IO = ConveyorIoController()
 
 
 def test_axis(
@@ -391,11 +441,11 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                 if endpoint == "/api/conveyor-relay":
                     channel = int(payload.get("channel"))
                     state = bool(payload.get("state"))
-                    self.send_json(200, CONVEYOR_RELAYS.set_channel(channel, state))
+                    self.send_json(200, CONVEYOR_IO.set_channel(channel, state))
                     return
 
                 if endpoint == "/api/conveyor-relay-all-off":
-                    self.send_json(200, CONVEYOR_RELAYS.all_off())
+                    self.send_json(200, CONVEYOR_IO.all_off())
                     return
             except Exception as error:
                 self.send_json(500, {"error": str(error)})
@@ -403,7 +453,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
         def do_GET(self):
             endpoint = self.path.split("?", 1)[0]
             if endpoint == "/api/conveyor-relay-status":
-                self.send_json(200, CONVEYOR_RELAYS.status())
+                self.send_json(200, CONVEYOR_IO.status())
                 return
 
             SimpleHTTPRequestHandler.do_GET(self)
