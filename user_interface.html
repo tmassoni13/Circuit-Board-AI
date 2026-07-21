@@ -135,6 +135,13 @@
 
       .settings {
         display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 0.85fr);
+        gap: 16px;
+        align-content: start;
+      }
+
+      .settings-column {
+        display: grid;
         gap: 16px;
         align-content: start;
       }
@@ -156,6 +163,10 @@
         grid-template-columns: repeat(2, minmax(95px, 120px)) 80px;
         gap: 10px;
         align-items: end;
+      }
+
+      .folder-settings-grid {
+        grid-template-columns: minmax(150px, 190px);
       }
 
       .relay-grid {
@@ -190,6 +201,24 @@
 
       .relay-toggle {
         min-height: 36px;
+      }
+
+      .sensor-status {
+        min-height: 36px;
+        padding: 9px 12px;
+        border: 2px solid #3b4652;
+        background: #111820;
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 900;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .sensor-status.active {
+        border-color: #0d7f67;
+        background: #0d7f67;
+        color: #f8fafc;
       }
 
       .color-swatch input {
@@ -415,6 +444,7 @@
       }
 
       .settings-dialog {
+        position: relative;
         display: flex;
         flex-direction: column;
         gap: 16px;
@@ -463,6 +493,12 @@
         display: flex;
         gap: 8px;
         justify-content: flex-end;
+      }
+
+      .settings-reset-corner {
+        position: absolute;
+        left: 20px;
+        bottom: 20px;
       }
 
       .image-log-grid {
@@ -810,6 +846,11 @@
         }
 
         .settings {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .settings-column {
           gap: 10px;
         }
 
@@ -1124,75 +1165,78 @@
                 </div>
 
                 <section class="settings">
-                  <div class="settings-group">
-                    <div class="settings-section-title">Board</div>
-                    <div class="settings-grid">
-                      <div class="field">
-                        <label for="board-width-mm">Width mm</label>
-                        <input id="board-width-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
-                      </div>
-                      <div class="field">
-                        <label for="board-height-mm">Height mm</label>
-                        <input id="board-height-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
-                      </div>
-                      <div class="field color-swatch">
-                        <label for="board-background-color">Color</label>
-                        <input id="board-background-color" type="color" value="#002d04" oninput="autoApplySettings()">
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="settings-group">
-                    <div class="settings-section-title">Camera FOV</div>
-                    <div class="settings-grid">
-                      <div class="field">
-                        <label for="camera-fov-width-mm">Width mm</label>
-                        <input id="camera-fov-width-mm" type="number" min="10" max="500" step="1" value="180" oninput="autoApplySettings()" onblur="autoApplySettings()">
-                      </div>
-                      <div class="field">
-                        <label for="camera-fov-height-mm">Height mm</label>
-                        <input id="camera-fov-height-mm" type="number" min="10" max="500" step="1" value="140" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                  <div class="settings-column">
+                    <div class="settings-group">
+                      <div class="settings-section-title">Board</div>
+                      <div class="settings-grid">
+                        <div class="field">
+                          <label for="board-width-mm">Width mm</label>
+                          <input id="board-width-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
+                        <div class="field">
+                          <label for="board-height-mm">Height mm</label>
+                          <input id="board-height-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
+                        <div class="field color-swatch">
+                          <label for="board-background-color">Color</label>
+                          <input id="board-background-color" type="color" value="#002d04" oninput="autoApplySettings()">
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div class="settings-group">
-                    <div class="settings-section-title">Auto Capture</div>
-                    <div class="settings-grid">
-                      <div class="field">
-                        <label for="auto-capture-folder">Current Folder</label>
-                        <select id="auto-capture-folder" onchange="autoApplySettings()"></select>
+                    <div class="settings-group">
+                      <div class="settings-section-title">Camera FOV</div>
+                      <div class="settings-grid">
+                        <div class="field">
+                          <label for="camera-fov-width-mm">Width mm</label>
+                          <input id="camera-fov-width-mm" type="number" min="10" max="500" step="1" value="180" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
+                        <div class="field">
+                          <label for="camera-fov-height-mm">Height mm</label>
+                          <input id="camera-fov-height-mm" type="number" min="10" max="500" step="1" value="140" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div class="settings-group">
-                    <div class="settings-section-title">Conveyor Relay Test</div>
-                    <div class="relay-grid">
-                      <div class="relay-row">
-                        <div class="relay-label">CH1 P35</div>
-                        <button id="relay-toggle-1" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(1)">Off</button>
+                    <div class="settings-group">
+                      <div class="settings-section-title">Auto Capture</div>
+                      <div class="settings-grid folder-settings-grid">
+                        <div class="field">
+                          <label for="auto-capture-folder">Current Folder</label>
+                          <select id="auto-capture-folder" onchange="autoApplySettings()"></select>
+                        </div>
                       </div>
-                      <div class="relay-row">
-                        <div class="relay-label">CH2 P33</div>
-                        <button id="relay-toggle-2" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(2)">Off</button>
-                      </div>
-                      <div class="relay-row">
-                        <div class="relay-label">CH3 P31</div>
-                        <button id="relay-toggle-3" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(3)">Off</button>
-                      </div>
-                      <div class="relay-row">
-                        <div class="relay-label">CH4 P29</div>
-                        <button id="relay-toggle-4" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(4)">Off</button>
-                      </div>
-                      <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
                     </div>
+
                   </div>
 
-                  <div class="settings-actions">
-                    <button type="button" onclick="resetSettingsToDefaults()">Reset Defaults</button>
+                  <div class="settings-column">
+                    <div class="settings-group">
+                      <div class="settings-section-title">Conveyor IO Test</div>
+                      <div class="relay-grid">
+                        <div class="relay-row">
+                          <div class="relay-label">Forward P35</div>
+                          <button id="relay-toggle-1" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(1)">Off</button>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Reverse P33</div>
+                          <button id="relay-toggle-2" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(2)">Off</button>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Sensor 1 P31</div>
+                          <div id="sensor-status-1" class="sensor-status">Clear</div>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Sensor 2 P29</div>
+                          <div id="sensor-status-2" class="sensor-status">Clear</div>
+                        </div>
+                        <button type="button" onclick="refreshConveyorIoStatus()">Refresh Beam Sensors</button>
+                        <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
+                      </div>
+                    </div>
                   </div>
                 </section>
+                <button class="settings-reset-corner" type="button" onclick="resetSettingsToDefaults()">Reset Defaults</button>
               </section>
             </div>
             <div id="image-log-overlay" class="settings-overlay">
@@ -1286,7 +1330,8 @@
       const DEFAULT_IMAGE_FOLDER_NAME = "Manual Captures";
       const FAILURE_IMAGE_FOLDER_NAME = "failures";
       const PROTECTED_IMAGE_FOLDERS = [DEFAULT_IMAGE_FOLDER_NAME, FAILURE_IMAGE_FOLDER_NAME];
-      const CONVEYOR_RELAY_CHANNELS = [1, 2, 3, 4];
+      const CONVEYOR_RELAY_CHANNELS = [1, 2];
+      const CONVEYOR_SENSOR_CHANNELS = [1, 2];
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -1336,9 +1381,7 @@
       let waitingForNextBoard = false;
       let relayStates = {
         1: false,
-        2: false,
-        3: false,
-        4: false
+        2: false
       };
 
       function setMachineStatus(value, state = "idle") {
@@ -1677,6 +1720,7 @@
       function openSettings() {
         closeImageLog();
         document.getElementById("settings-overlay").classList.add("active");
+        refreshConveyorIoStatus(false);
       }
 
       function closeSettings() {
@@ -2264,12 +2308,52 @@
         }
       }
 
+      function updateConveyorSensorIndicators(sensors = {}) {
+        for (const sensor of CONVEYOR_SENSOR_CHANNELS) {
+          const indicator = document.getElementById(`sensor-status-${sensor}`);
+          if (!indicator) {
+            continue;
+          }
+
+          const blocked = Boolean(sensors[sensor] || sensors[String(sensor)]);
+          indicator.textContent = blocked ? "Blocked" : "Clear";
+          indicator.classList.toggle("active", blocked);
+        }
+      }
+
+      function updateConveyorIoStatus(payload) {
+        updateConveyorRelayButtons(payload.states || {});
+        updateConveyorSensorIndicators(payload.sensors || {});
+      }
+
       async function toggleConveyorRelay(channel) {
         await setConveyorRelay(channel, !relayStates[channel]);
       }
 
+      async function refreshConveyorIoStatus(writeLog = true) {
+        try {
+          const response = await fetch("/api/conveyor-relay-status");
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+
+          updateConveyorIoStatus(payload);
+          if (writeLog) {
+            appendTerminalLine(
+              `[CONVEYOR] sensors S1=${payload.sensors[1] ? "blocked" : "clear"} S2=${payload.sensors[2] ? "blocked" : "clear"}`
+            );
+          }
+        } catch (error) {
+          if (writeLog) {
+            appendTerminalLine(`[CONVEYOR ERROR] status failed: ${error.message}`);
+          }
+        }
+      }
+
       async function setConveyorRelay(channel, state) {
         try {
+          const previousStates = { ...relayStates };
           const response = await fetch("/api/conveyor-relay", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2280,8 +2364,14 @@
             throw new Error(payload.error || `HTTP ${response.status}`);
           }
 
-          updateConveyorRelayButtons(payload.states || {});
-          appendTerminalLine(`[CONVEYOR] CH${channel} pin ${payload.pins[channel]} ${state ? "ON" : "OFF"}.`);
+          updateConveyorIoStatus(payload);
+          appendTerminalLine(`[CONVEYOR] ${channel === 1 ? "Forward" : "Reverse"} pin ${payload.relay_pins[channel]} ${state ? "ON" : "OFF"}.`);
+          if (state && channel === 1 && previousStates[2] && !relayStates[2]) {
+            appendTerminalLine("[SAFETY] Reverse relay forced OFF before Forward relay turned ON.");
+          }
+          if (state && channel === 2 && previousStates[1] && !relayStates[1]) {
+            appendTerminalLine("[SAFETY] Forward relay forced OFF before Reverse relay turned ON.");
+          }
         } catch (error) {
           appendTerminalLine(`[CONVEYOR ERROR] CH${channel}: ${error.message}`);
         }
@@ -2299,7 +2389,7 @@
             throw new Error(payload.error || `HTTP ${response.status}`);
           }
 
-          updateConveyorRelayButtons(payload.states || {});
+          updateConveyorIoStatus(payload);
           appendTerminalLine("[CONVEYOR] All relay channels OFF.");
         } catch (error) {
           appendTerminalLine(`[CONVEYOR ERROR] all off failed: ${error.message}`);
