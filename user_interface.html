@@ -1223,12 +1223,16 @@
                           <button id="relay-toggle-2" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(2)">Off</button>
                         </div>
                         <div class="relay-row">
-                          <div class="relay-label">Sensor 1 P31</div>
+                          <div class="relay-label">Start P31</div>
                           <div id="sensor-status-1" class="sensor-status">Clear</div>
                         </div>
                         <div class="relay-row">
-                          <div class="relay-label">Sensor 2 P29</div>
+                          <div class="relay-label">End P29</div>
                           <div id="sensor-status-2" class="sensor-status">Clear</div>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Imaging P27</div>
+                          <div id="sensor-status-3" class="sensor-status">Clear</div>
                         </div>
                         <button type="button" onclick="refreshConveyorIoStatus()">Refresh Beam Sensors</button>
                         <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
@@ -1331,7 +1335,12 @@
       const FAILURE_IMAGE_FOLDER_NAME = "failures";
       const PROTECTED_IMAGE_FOLDERS = [DEFAULT_IMAGE_FOLDER_NAME, FAILURE_IMAGE_FOLDER_NAME];
       const CONVEYOR_RELAY_CHANNELS = [1, 2];
-      const CONVEYOR_SENSOR_CHANNELS = [1, 2];
+      const CONVEYOR_SENSOR_CHANNELS = [1, 2, 3];
+      const CONVEYOR_SENSOR_NAMES = {
+        1: "Start",
+        2: "End",
+        3: "Imaging"
+      };
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -2340,9 +2349,10 @@
 
           updateConveyorIoStatus(payload);
           if (writeLog) {
-            appendTerminalLine(
-              `[CONVEYOR] sensors S1=${payload.sensors[1] ? "blocked" : "clear"} S2=${payload.sensors[2] ? "blocked" : "clear"}`
-            );
+            const sensorSummary = CONVEYOR_SENSOR_CHANNELS.map((sensor) => (
+              `${CONVEYOR_SENSOR_NAMES[sensor]}=${payload.sensors[sensor] ? "blocked" : "clear"}`
+            )).join(" ");
+            appendTerminalLine(`[CONVEYOR] sensors ${sensorSummary}`);
           }
         } catch (error) {
           if (writeLog) {
