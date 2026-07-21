@@ -56,11 +56,20 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 ENV
 fi
 
-SUPPLEMENTARY_GROUPS=""
+SERVICE_GROUPS=()
 if getent group dialout >/dev/null; then
   echo "[SETUP] Adding ${SERVICE_USER} to dialout so it can open /dev/ttyUSB*..."
   sudo usermod -a -G dialout "${SERVICE_USER}"
-  SUPPLEMENTARY_GROUPS="SupplementaryGroups=dialout"
+  SERVICE_GROUPS+=("dialout")
+fi
+if getent group gpio >/dev/null; then
+  echo "[SETUP] Adding ${SERVICE_USER} to gpio so it can control relay outputs..."
+  sudo usermod -a -G gpio "${SERVICE_USER}"
+  SERVICE_GROUPS+=("gpio")
+fi
+SUPPLEMENTARY_GROUPS=""
+if [[ ${#SERVICE_GROUPS[@]} -gt 0 ]]; then
+  SUPPLEMENTARY_GROUPS="SupplementaryGroups=${SERVICE_GROUPS[*]}"
 fi
 
 echo "[SETUP] Writing ${AXIS_SERVICE_PATH}..."
@@ -93,6 +102,7 @@ After=network.target
 [Service]
 Type=simple
 User=${SERVICE_USER}
+${SUPPLEMENTARY_GROUPS}
 WorkingDirectory=${PROJECT_ROOT}
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=${PROJECT_ROOT}/src

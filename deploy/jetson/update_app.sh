@@ -10,6 +10,7 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-$(command -v python3)}"
+SERVICE_USER="${SERVICE_USER:-$(id -un)}"
 AXIS_SERVICE_NAME="pcb-axis-bridge.service"
 UI_SERVICE_NAME="pcb-inspector-ui.service"
 ENV_PATH="/etc/pcb-inline-inspector.env"
@@ -79,6 +80,11 @@ chmod +x "${APP_DESKTOP_PATH}" "${UPDATE_DESKTOP_PATH}"
 if command -v gio >/dev/null 2>&1; then
   gio set "${APP_DESKTOP_PATH}" metadata::trusted true >/dev/null 2>&1 || true
   gio set "${UPDATE_DESKTOP_PATH}" metadata::trusted true >/dev/null 2>&1 || true
+fi
+
+if getent group gpio >/dev/null; then
+  echo "[UPDATE] Ensuring ${SERVICE_USER} can access Jetson GPIO..."
+  sudo usermod -a -G gpio "${SERVICE_USER}"
 fi
 
 echo "[UPDATE] Ensuring Gemini model is ${DEFAULT_GEMINI_MODEL}..."
