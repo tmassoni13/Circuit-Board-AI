@@ -1212,7 +1212,7 @@
 
                   <div class="settings-column">
                     <div class="settings-group">
-                      <div class="settings-section-title">Conveyor IO Test</div>
+                      <div class="settings-section-title">Conveyor IO</div>
                       <div class="relay-grid">
                         <div class="relay-row">
                           <div class="relay-label">Forward P35</div>
@@ -2333,6 +2333,11 @@
       function updateConveyorIoStatus(payload) {
         updateConveyorRelayButtons(payload.states || {});
         updateConveyorSensorIndicators(payload.sensors || {});
+        if (payload.sensor_errors) {
+          for (const [sensor, message] of Object.entries(payload.sensor_errors)) {
+            appendTerminalLine(`[CONVEYOR WARNING] ${CONVEYOR_SENSOR_NAMES[sensor] || `Sensor ${sensor}`}: ${message}`);
+          }
+        }
       }
 
       async function toggleConveyorRelay(channel) {
