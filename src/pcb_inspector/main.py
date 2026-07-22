@@ -144,8 +144,19 @@ class ConveyorIoController:
             sensor_states.setdefault(sensor, False)
         return sensor_states
 
+    def read_sensor_raw_levels(self):
+        self._ensure_initialized()
+        GPIO = self._load_gpio()
+        sensor_levels = {}
+        for sensor, pin in self._enabled_sensor_pins.items():
+            sensor_levels[sensor] = "HIGH" if GPIO.input(pin) == GPIO.HIGH else "LOW"
+        for sensor in CONVEYOR_SENSOR_INPUT_PINS:
+            sensor_levels.setdefault(sensor, "UNAVAILABLE")
+        return sensor_levels
+
     def status(self):
         sensor_states = self.read_sensors()
+        sensor_levels = self.read_sensor_raw_levels()
         return {
             "relay_pins": CONVEYOR_RELAY_OUTPUT_PINS,
             "sensor_pins": CONVEYOR_SENSOR_INPUT_PINS,
@@ -153,6 +164,7 @@ class ConveyorIoController:
             "sensor_active_low": self.sensor_active_low,
             "states": self._relay_states,
             "sensors": sensor_states,
+            "sensor_raw_levels": sensor_levels,
             "sensor_errors": self._sensor_errors,
             "sensor_meaning": "true means diffuse reflective sensor sees a board/object",
             "initialized": self._initialized,

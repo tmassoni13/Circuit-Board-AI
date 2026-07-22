@@ -1387,6 +1387,7 @@
         1: false,
         2: false
       };
+      let conveyorIoPollTimer = null;
 
       function setMachineStatus(value, state = "idle") {
         const status = document.querySelector(".status");
@@ -1725,10 +1726,26 @@
         closeImageLog();
         document.getElementById("settings-overlay").classList.add("active");
         refreshConveyorIoStatus(false);
+        startConveyorIoPolling();
       }
 
       function closeSettings() {
         document.getElementById("settings-overlay").classList.remove("active");
+        stopConveyorIoPolling();
+      }
+
+      function startConveyorIoPolling() {
+        stopConveyorIoPolling();
+        conveyorIoPollTimer = window.setInterval(() => {
+          refreshConveyorIoStatus(false);
+        }, 250);
+      }
+
+      function stopConveyorIoPolling() {
+        if (conveyorIoPollTimer) {
+          window.clearInterval(conveyorIoPollTimer);
+          conveyorIoPollTimer = null;
+        }
       }
 
       function openImageLog() {
@@ -2312,7 +2329,7 @@
         }
       }
 
-      function updateConveyorSensorIndicators(sensors = {}) {
+      function updateConveyorSensorIndicators(sensors = {}, rawLevels = {}) {
         for (const sensor of CONVEYOR_SENSOR_CHANNELS) {
           const indicator = document.getElementById(`sensor-status-${sensor}`);
           if (!indicator) {
@@ -2320,14 +2337,15 @@
           }
 
           const detected = Boolean(sensors[sensor] || sensors[String(sensor)]);
-          indicator.textContent = detected ? "Detected" : "Clear";
+          const rawLevel = rawLevels[sensor] || rawLevels[String(sensor)] || "--";
+          indicator.textContent = `${detected ? "Detected" : "Clear"} ${rawLevel}`;
           indicator.classList.toggle("active", detected);
         }
       }
 
       function updateConveyorIoStatus(payload) {
         updateConveyorRelayButtons(payload.states || {});
-        updateConveyorSensorIndicators(payload.sensors || {});
+        updateConveyorSensorIndicators(payload.sensors || {}, payload.sensor_raw_levels || {});
         if (payload.sensor_errors) {
           for (const [sensor, message] of Object.entries(payload.sensor_errors)) {
             appendTerminalLine(`[CONVEYOR WARNING] ${CONVEYOR_SENSOR_NAMES[sensor] || `Sensor ${sensor}`}: ${message}`);
