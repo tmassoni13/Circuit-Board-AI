@@ -34,6 +34,7 @@ CONVEYOR_DIRECTION_INTERLOCKS = {
     1: 2,
     2: 1,
 }
+CONVEYOR_RELAY_ACTIVE_LOW = True
 
 
 class ConveyorIoController:
@@ -52,12 +53,14 @@ class ConveyorIoController:
     relay board is active-low, flip `relay_active_low` in one place.
     """
 
-    def __init__(self, relay_active_low=False, sensor_active_low=CONVEYOR_SENSOR_ACTIVE_LOW):
+    def __init__(self, relay_active_low=CONVEYOR_RELAY_ACTIVE_LOW, sensor_active_low=CONVEYOR_SENSOR_ACTIVE_LOW):
         self.relay_active_low = relay_active_low
         self.sensor_active_low = sensor_active_low
         self._gpio = None
         self._initialized = False
         self._relay_states = {channel: False for channel in CONVEYOR_RELAY_OUTPUT_PINS}
+        self._enabled_sensor_pins = {}
+        self._sensor_errors = {}
         self._lock = threading.RLock()
 
     def _load_gpio(self):
@@ -84,8 +87,15 @@ class ConveyorIoController:
         off_level = GPIO.HIGH if self.relay_active_low else GPIO.LOW
         for pin in CONVEYOR_RELAY_OUTPUT_PINS.values():
             GPIO.setup(pin, GPIO.OUT, initial=off_level)
-        for pin in CONVEYOR_SENSOR_INPUT_PINS.values():
-            GPIO.setup(pin, GPIO.IN)
+        for sensor, pin in CONVEYOR_SENSOR_INPUT_PINS.items():
+            try:
+                GPIO.setup(pin, GPIO.IN)
+                self._enabled_sensor_pins[sensor] = pin
+            except Exception as error:
+                # Some Jetson pinmux configurations reject specific physical
+                # header pins. Keep the rest of the conveyor IO alive and
+                # report the failed sensor in `/api/conveyor-relay-status`.
+                self._sensor_errors[sensor] = f"pin {pin}: {error}"
         self._initialized = True
 
     def set_channel(self, channel, enabled):
@@ -124,11 +134,13 @@ class ConveyorIoController:
         self._ensure_initialized()
         GPIO = self._load_gpio()
         sensor_states = {}
-        for sensor, pin in CONVEYOR_SENSOR_INPUT_PINS.items():
+        for sensor, pin in self._enabled_sensor_pins.items():
             raw_high = GPIO.input(pin) == GPIO.HIGH
             # Return logical board detection, not raw electrical level:
             # True means the reflector beam is blocked by a board.
             sensor_states[sensor] = (not raw_high) if self.sensor_active_low else raw_high
+        for sensor in CONVEYOR_SENSOR_INPUT_PINS:
+            sensor_states.setdefault(sensor, False)
         return sensor_states
 
     def status(self):
@@ -140,6 +152,7 @@ class ConveyorIoController:
             "sensor_active_low": self.sensor_active_low,
             "states": self._relay_states,
             "sensors": sensor_states,
+            "sensor_errors": self._sensor_errors,
             "sensor_meaning": "true means polarized retroreflective beam is blocked by a board",
             "initialized": self._initialized,
         }
