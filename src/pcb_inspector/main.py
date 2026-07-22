@@ -16,8 +16,8 @@ from pcb_inspector.laser_engraver import (
 )
 
 CONVEYOR_RELAY_OUTPUT_PINS = {
-    1: 35,
-    2: 33,
+    1: 33,
+    2: 35,
 }
 CONVEYOR_SENSOR_INPUT_PINS = {
     1: 31,
@@ -41,8 +41,8 @@ class ConveyorIoController:
     This class uses GPIO.BOARD numbering because the hardware plan is written
     in physical Jetson Nano header pin numbers:
 
-    - pin 35: conveyor forward relay output
-    - pin 33: conveyor reverse relay output
+    - pin 33: conveyor forward relay output
+    - pin 35: conveyor reverse relay output
     - pin 31: start diffuse reflective sensor
     - pin 29: end diffuse reflective sensor
     - imaging sensor is planned but temporarily disabled until wired
