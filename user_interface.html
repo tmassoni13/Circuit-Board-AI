@@ -1230,7 +1230,7 @@
                           <div class="relay-label">End P29</div>
                           <div id="sensor-status-2" class="sensor-status">Clear</div>
                         </div>
-                        <button type="button" onclick="refreshConveyorIoStatus()">Refresh Beam Sensors</button>
+                        <button type="button" onclick="refreshConveyorIoStatus()">Refresh Sensors</button>
                         <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
                       </div>
                     </div>
@@ -2319,9 +2319,9 @@
             continue;
           }
 
-          const blocked = Boolean(sensors[sensor] || sensors[String(sensor)]);
-          indicator.textContent = blocked ? "Blocked" : "Clear";
-          indicator.classList.toggle("active", blocked);
+          const detected = Boolean(sensors[sensor] || sensors[String(sensor)]);
+          indicator.textContent = detected ? "Detected" : "Clear";
+          indicator.classList.toggle("active", detected);
         }
       }
 
@@ -2350,7 +2350,7 @@
           updateConveyorIoStatus(payload);
           if (writeLog) {
             const sensorSummary = CONVEYOR_SENSOR_CHANNELS.map((sensor) => (
-              `${CONVEYOR_SENSOR_NAMES[sensor]}=${payload.sensors[sensor] ? "blocked" : "clear"}`
+              `${CONVEYOR_SENSOR_NAMES[sensor]}=${payload.sensors[sensor] ? "detected" : "clear"}`
             )).join(" ");
             appendTerminalLine(`[CONVEYOR] sensors ${sensorSummary}`);
           }

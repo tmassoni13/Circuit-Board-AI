@@ -23,11 +23,10 @@ CONVEYOR_SENSOR_INPUT_PINS = {
     1: 31,
     2: 29,
 }
-# Polarized retroreflective board detection watches a reflector beam. A board is
-# present when the beam is blocked. With an NPN open-collector output pulled up
-# to Jetson-safe 3.3 V, active output normally reads LOW, so the default is
-# active-low. If the physical sensor is set to Light-ON instead of Dark-ON and
-# the UI reads backward, flip this one value.
+# The Omron E3Z-D61 is treated as a diffuse reflective board-present sensor.
+# With an NPN open-collector output pulled up to Jetson-safe 3.3 V, the sensor
+# output normally reads LOW when it is active, so the default is active-low.
+# If a specific sensor/wiring setup reads backward, flip this one value.
 CONVEYOR_SENSOR_ACTIVE_LOW = True
 CONVEYOR_DIRECTION_INTERLOCKS = {
     1: 2,
@@ -44,8 +43,8 @@ class ConveyorIoController:
 
     - pin 35: conveyor forward relay output
     - pin 33: conveyor reverse relay output
-    - pin 31: start optical sensor
-    - pin 29: end optical sensor
+    - pin 31: start diffuse reflective sensor
+    - pin 29: end diffuse reflective sensor
     - imaging sensor is planned but temporarily disabled until wired
 
     Relay ON currently means the output pin is driven HIGH. If the installed
@@ -88,7 +87,14 @@ class ConveyorIoController:
             GPIO.setup(pin, GPIO.OUT, initial=off_level)
         for sensor, pin in CONVEYOR_SENSOR_INPUT_PINS.items():
             try:
-                GPIO.setup(pin, GPIO.IN)
+                # NPN open-collector sensor outputs need a pull-up so an open
+                # or inactive sensor line reads HIGH. Without this, the input
+                # can float LOW and the UI will incorrectly show "Detected"
+                # before anything is in front of the sensor.
+                if hasattr(GPIO, "PUD_UP"):
+                    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+                else:
+                    GPIO.setup(pin, GPIO.IN)
                 self._enabled_sensor_pins[sensor] = pin
             except Exception as error:
                 # Some Jetson pinmux configurations reject specific physical
@@ -136,7 +142,7 @@ class ConveyorIoController:
         for sensor, pin in self._enabled_sensor_pins.items():
             raw_high = GPIO.input(pin) == GPIO.HIGH
             # Return logical board detection, not raw electrical level:
-            # True means the reflector beam is blocked by a board.
+            # True means the diffuse reflective sensor sees a board/object.
             sensor_states[sensor] = (not raw_high) if self.sensor_active_low else raw_high
         for sensor in CONVEYOR_SENSOR_INPUT_PINS:
             sensor_states.setdefault(sensor, False)
@@ -152,7 +158,7 @@ class ConveyorIoController:
             "states": self._relay_states,
             "sensors": sensor_states,
             "sensor_errors": self._sensor_errors,
-            "sensor_meaning": "true means polarized retroreflective beam is blocked by a board",
+            "sensor_meaning": "true means diffuse reflective sensor sees a board/object",
             "initialized": self._initialized,
         }
 
