@@ -23,11 +23,11 @@ CONVEYOR_SENSOR_INPUT_PINS = {
     1: 31,
     2: 29,
 }
-# The Omron E3Z-D61 is treated as a diffuse reflective board-present sensor.
-# With an NPN open-collector output pulled up to Jetson-safe 3.3 V, the sensor
-# output normally reads LOW when it is active, so the default is active-low.
-# If a specific sensor/wiring setup reads backward, flip this one value.
-CONVEYOR_SENSOR_ACTIVE_LOW = True
+# The Omron E3Z-D61 sensors are wired through resistor dividers so the Jetson
+# GPIO sees a safe 0-3.3 V signal instead of the sensor's full 12 V output.
+# In that wiring, LOW means no output/no object and HIGH means the orange output
+# LED is on/object detected.
+CONVEYOR_SENSOR_ACTIVE_LOW = False
 CONVEYOR_DIRECTION_INTERLOCKS = {
     1: 2,
     2: 1,
@@ -87,14 +87,10 @@ class ConveyorIoController:
             GPIO.setup(pin, GPIO.OUT, initial=off_level)
         for sensor, pin in CONVEYOR_SENSOR_INPUT_PINS.items():
             try:
-                # NPN open-collector sensor outputs need a pull-up so an open
-                # or inactive sensor line reads HIGH. Without this, the input
-                # can float LOW and the UI will incorrectly show "Detected"
-                # before anything is in front of the sensor.
-                if hasattr(GPIO, "PUD_UP"):
-                    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-                else:
-                    GPIO.setup(pin, GPIO.IN)
+                # The sensor signal is already driven through a resistor
+                # divider, so do not enable an internal pull-up or pull-down.
+                # The app should follow the sensor's orange output LED.
+                GPIO.setup(pin, GPIO.IN)
                 self._enabled_sensor_pins[sensor] = pin
             except Exception as error:
                 # Some Jetson pinmux configurations reject specific physical
