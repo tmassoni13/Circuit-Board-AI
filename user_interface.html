@@ -1230,10 +1230,6 @@
                           <div class="relay-label">End P29</div>
                           <div id="sensor-status-2" class="sensor-status">Clear</div>
                         </div>
-                        <div class="relay-row">
-                          <div class="relay-label">Imaging P27</div>
-                          <div id="sensor-status-3" class="sensor-status">Clear</div>
-                        </div>
                         <button type="button" onclick="refreshConveyorIoStatus()">Refresh Beam Sensors</button>
                         <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
                       </div>
@@ -1335,11 +1331,10 @@
       const FAILURE_IMAGE_FOLDER_NAME = "failures";
       const PROTECTED_IMAGE_FOLDERS = [DEFAULT_IMAGE_FOLDER_NAME, FAILURE_IMAGE_FOLDER_NAME];
       const CONVEYOR_RELAY_CHANNELS = [1, 2];
-      const CONVEYOR_SENSOR_CHANNELS = [1, 2, 3];
+      const CONVEYOR_SENSOR_CHANNELS = [1, 2];
       const CONVEYOR_SENSOR_NAMES = {
         1: "Start",
-        2: "End",
-        3: "Imaging"
+        2: "End"
       };
 
       let autoScanTimer = null;

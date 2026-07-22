@@ -22,7 +22,6 @@ CONVEYOR_RELAY_OUTPUT_PINS = {
 CONVEYOR_SENSOR_INPUT_PINS = {
     1: 31,
     2: 29,
-    3: 27,
 }
 # Polarized retroreflective board detection watches a reflector beam. A board is
 # present when the beam is blocked. With an NPN open-collector output pulled up
@@ -47,7 +46,7 @@ class ConveyorIoController:
     - pin 33: conveyor reverse relay output
     - pin 31: start optical sensor
     - pin 29: end optical sensor
-    - pin 27: imaging optical sensor under the camera
+    - imaging sensor is planned but temporarily disabled until wired
 
     Relay ON currently means the output pin is driven HIGH. If the installed
     relay board is active-low, flip `relay_active_low` in one place.
