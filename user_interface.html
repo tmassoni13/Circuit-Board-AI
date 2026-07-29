@@ -1230,6 +1230,10 @@
                           <div class="relay-label">End</div>
                           <div id="sensor-status-2" class="sensor-status">Clear</div>
                         </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Sensor Logic</div>
+                          <button id="sensor-logic-toggle" class="relay-toggle" type="button" onclick="toggleSensorLogic()">LOW = Detected</button>
+                        </div>
                         <button type="button" onclick="refreshConveyorIoStatus()">Refresh Sensors</button>
                         <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
                       </div>
@@ -1387,6 +1391,7 @@
         1: false,
         2: false
       };
+      let sensorActiveLow = true;
       let conveyorIoPollTimer = null;
 
       function setMachineStatus(value, state = "idle") {
@@ -2343,9 +2348,22 @@
         }
       }
 
+      function updateConveyorSensorLogicButton(activeLow) {
+        sensorActiveLow = Boolean(activeLow);
+        const button = document.getElementById("sensor-logic-toggle");
+        if (!button) {
+          return;
+        }
+
+        button.textContent = sensorActiveLow ? "LOW = Detected" : "HIGH = Detected";
+        button.classList.toggle("relay-on", sensorActiveLow);
+        button.classList.toggle("relay-off", !sensorActiveLow);
+      }
+
       function updateConveyorIoStatus(payload) {
         updateConveyorRelayButtons(payload.states || {});
         updateConveyorSensorIndicators(payload.sensors || {}, payload.sensor_raw_levels || {});
+        updateConveyorSensorLogicButton(payload.sensor_active_low);
         if (payload.sensor_errors) {
           for (const [sensor, message] of Object.entries(payload.sensor_errors)) {
             appendTerminalLine(`[CONVEYOR WARNING] ${CONVEYOR_SENSOR_NAMES[sensor] || `Sensor ${sensor}`}: ${message}`);
@@ -2355,6 +2373,25 @@
 
       async function toggleConveyorRelay(channel) {
         await setConveyorRelay(channel, !relayStates[channel]);
+      }
+
+      async function toggleSensorLogic() {
+        try {
+          const response = await fetch("/api/conveyor-sensor-logic", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ active_low: !sensorActiveLow })
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+
+          updateConveyorIoStatus(payload);
+          appendTerminalLine(`[CONVEYOR] sensor logic set to ${payload.sensor_active_low ? "LOW = detected" : "HIGH = detected"}.`);
+        } catch (error) {
+          appendTerminalLine(`[CONVEYOR ERROR] sensor logic failed: ${error.message}`);
+        }
       }
 
       async function refreshConveyorIoStatus(writeLog = true) {

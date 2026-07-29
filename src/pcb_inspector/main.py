@@ -23,11 +23,11 @@ CONVEYOR_SENSOR_INPUT_PINS = {
     1: 31,
     2: 29,
 }
-# The Omron E3Z-D61 sensors are wired through resistor dividers so the Jetson
-# GPIO sees a safe 0-3.3 V signal instead of the sensor's full 12 V output.
-# In that wiring, LOW means no output/no object and HIGH means the orange output
-# LED is on/object detected.
-CONVEYOR_SENSOR_ACTIVE_LOW = False
+# The Omron E3Z-D61 sensor interface is expected to provide a safe 0-3.3 V
+# signal to the Jetson. With the current divider measurements, HIGH means clear
+# and LOW means detected. The UI exposes a logic toggle because the sensor's
+# final output mode can be changed during wiring/testing.
+CONVEYOR_SENSOR_ACTIVE_LOW = True
 CONVEYOR_DIRECTION_INTERLOCKS = {
     1: 2,
     2: 1,
@@ -87,10 +87,15 @@ class ConveyorIoController:
             GPIO.setup(pin, GPIO.OUT, initial=off_level)
         for sensor, pin in CONVEYOR_SENSOR_INPUT_PINS.items():
             try:
-                # The sensor signal is already driven through a resistor
-                # divider, so do not enable an internal pull-up or pull-down.
-                # The app should follow the sensor's orange output LED.
-                GPIO.setup(pin, GPIO.IN)
+                # The sensor signal is already driven through an external
+                # resistor divider, so the Jetson must not add its internal
+                # pull-up or pull-down. A GPIO pull resistor changes the
+                # divider ratio and can drag the measured signal away from the
+                # expected LOW/HIGH voltages.
+                if hasattr(GPIO, "PUD_OFF"):
+                    GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_OFF)
+                else:
+                    GPIO.setup(pin, GPIO.IN)
                 self._enabled_sensor_pins[sensor] = pin
             except Exception as error:
                 # Some Jetson pinmux configurations reject specific physical
@@ -129,6 +134,11 @@ class ConveyorIoController:
             self._ensure_initialized()
             for channel in CONVEYOR_RELAY_OUTPUT_PINS:
                 self._set_channel_unlocked(channel, False)
+            return self.status()
+
+    def set_sensor_active_low(self, active_low):
+        with self._lock:
+            self.sensor_active_low = bool(active_low)
             return self.status()
 
     def read_sensors(self):
@@ -445,7 +455,12 @@ def serve_ui(host: str, port: int, root: Path) -> None:
 
         def do_POST(self):
             endpoint = self.path.split("?", 1)[0]
-            if endpoint not in {"/api/analyze-board", "/api/conveyor-relay", "/api/conveyor-relay-all-off"}:
+            if endpoint not in {
+                "/api/analyze-board",
+                "/api/conveyor-relay",
+                "/api/conveyor-relay-all-off",
+                "/api/conveyor-sensor-logic",
+            }:
                 self.send_error(404, "Unknown endpoint")
                 return
 
@@ -472,6 +487,10 @@ def serve_ui(host: str, port: int, root: Path) -> None:
 
                 if endpoint == "/api/conveyor-relay-all-off":
                     self.send_json(200, CONVEYOR_IO.all_off())
+                    return
+
+                if endpoint == "/api/conveyor-sensor-logic":
+                    self.send_json(200, CONVEYOR_IO.set_sensor_active_low(bool(payload.get("active_low"))))
                     return
             except Exception as error:
                 self.send_json(500, {"error": str(error)})
