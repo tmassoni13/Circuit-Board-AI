@@ -1234,6 +1234,7 @@
                           <div class="relay-label">Sensor Logic</div>
                           <button id="sensor-logic-toggle" class="relay-toggle" type="button" onclick="toggleSensorLogic()">LOW = Detected</button>
                         </div>
+                        <button id="ping-pong-toggle" class="relay-off" type="button" onclick="toggleConveyorPingPong()">Ping Pong Off</button>
                         <button type="button" onclick="refreshConveyorIoStatus()">Refresh Sensors</button>
                         <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
                       </div>
@@ -1393,6 +1394,10 @@
       };
       let sensorActiveLow = true;
       let conveyorIoPollTimer = null;
+      let conveyorPingPongTimer = null;
+      let conveyorPingPongEnabled = false;
+      let conveyorPingPongDirection = "stopped";
+      let conveyorPingPongBusy = false;
 
       function setMachineStatus(value, state = "idle") {
         const status = document.querySelector(".status");
@@ -2394,6 +2399,103 @@
         }
       }
 
+      function updateConveyorPingPongButton() {
+        const button = document.getElementById("ping-pong-toggle");
+        if (!button) {
+          return;
+        }
+
+        button.textContent = conveyorPingPongEnabled ? "Ping Pong On" : "Ping Pong Off";
+        button.classList.toggle("relay-on", conveyorPingPongEnabled);
+        button.classList.toggle("relay-off", !conveyorPingPongEnabled);
+      }
+
+      async function toggleConveyorPingPong() {
+        if (conveyorPingPongEnabled) {
+          await stopConveyorPingPong();
+          return;
+        }
+
+        conveyorPingPongEnabled = true;
+        conveyorPingPongDirection = "stopped";
+        updateConveyorPingPongButton();
+        appendTerminalLine("[PING PONG] enabled. Start sensor drives forward; End sensor drives reverse.");
+        await allConveyorRelaysOff({ keepPingPongState: true, writeLog: false });
+
+        conveyorPingPongTimer = window.setInterval(() => {
+          runConveyorPingPongStep();
+        }, 150);
+        runConveyorPingPongStep();
+      }
+
+      async function stopConveyorPingPong() {
+        conveyorPingPongEnabled = false;
+        conveyorPingPongDirection = "stopped";
+        if (conveyorPingPongTimer) {
+          window.clearInterval(conveyorPingPongTimer);
+          conveyorPingPongTimer = null;
+        }
+        updateConveyorPingPongButton();
+        await allConveyorRelaysOff({ keepPingPongState: true, writeLog: false });
+        appendTerminalLine("[PING PONG] disabled. Conveyor relays off.");
+      }
+
+      async function runConveyorPingPongStep() {
+        if (!conveyorPingPongEnabled || conveyorPingPongBusy) {
+          return;
+        }
+
+        conveyorPingPongBusy = true;
+        try {
+          const response = await fetch("/api/conveyor-relay-status");
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+
+          updateConveyorIoStatus(payload);
+
+          const startDetected = Boolean(payload.sensors && (payload.sensors[1] || payload.sensors["1"]));
+          const endDetected = Boolean(payload.sensors && (payload.sensors[2] || payload.sensors["2"]));
+
+          if (startDetected && endDetected) {
+            await setConveyorPingPongDirection("stopped", "both sensors detected");
+            return;
+          }
+
+          if (startDetected) {
+            await setConveyorPingPongDirection("forward", "start detected");
+            return;
+          }
+
+          if (endDetected) {
+            await setConveyorPingPongDirection("reverse", "end detected");
+          }
+        } catch (error) {
+          appendTerminalLine(`[PING PONG ERROR] ${error.message}`);
+          await stopConveyorPingPong();
+        } finally {
+          conveyorPingPongBusy = false;
+        }
+      }
+
+      async function setConveyorPingPongDirection(direction, reason) {
+        if (direction === conveyorPingPongDirection) {
+          return;
+        }
+
+        conveyorPingPongDirection = direction;
+        if (direction === "forward") {
+          await setConveyorRelay(1, true);
+        } else if (direction === "reverse") {
+          await setConveyorRelay(2, true);
+        } else {
+          await allConveyorRelaysOff({ keepPingPongState: true, writeLog: false });
+        }
+
+        appendTerminalLine(`[PING PONG] ${reason}; direction=${direction}.`);
+      }
+
       async function refreshConveyorIoStatus(writeLog = true) {
         try {
           const response = await fetch("/api/conveyor-relay-status");
@@ -2442,7 +2544,19 @@
         }
       }
 
-      async function allConveyorRelaysOff() {
+      async function allConveyorRelaysOff(options = {}) {
+        const keepPingPongState = Boolean(options.keepPingPongState);
+        const writeLog = options.writeLog !== false;
+        if (!keepPingPongState && conveyorPingPongEnabled) {
+          conveyorPingPongEnabled = false;
+          conveyorPingPongDirection = "stopped";
+          if (conveyorPingPongTimer) {
+            window.clearInterval(conveyorPingPongTimer);
+            conveyorPingPongTimer = null;
+          }
+          updateConveyorPingPongButton();
+        }
+
         try {
           const response = await fetch("/api/conveyor-relay-all-off", {
             method: "POST",
@@ -2455,7 +2569,9 @@
           }
 
           updateConveyorIoStatus(payload);
-          appendTerminalLine("[CONVEYOR] All relay channels OFF.");
+          if (writeLog) {
+            appendTerminalLine("[CONVEYOR] All relay channels OFF.");
+          }
         } catch (error) {
           appendTerminalLine(`[CONVEYOR ERROR] all off failed: ${error.message}`);
         }
