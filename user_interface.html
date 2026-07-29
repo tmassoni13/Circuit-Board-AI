@@ -1234,7 +1234,7 @@
                           <div class="relay-label">Sensor Logic</div>
                           <button id="sensor-logic-toggle" class="relay-toggle" type="button" onclick="toggleSensorLogic()">LOW = Detected</button>
                         </div>
-                        <button id="ping-pong-toggle" class="relay-off" type="button" onclick="toggleConveyorPingPong()">Ping Pong Off</button>
+                        <button id="sensor-transfer-toggle" class="relay-off" type="button" onclick="toggleSensorTransfer()">Move To Other Sensor</button>
                         <button type="button" onclick="refreshConveyorIoStatus()">Refresh Sensors</button>
                         <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
                       </div>
@@ -1394,10 +1394,11 @@
       };
       let sensorActiveLow = true;
       let conveyorIoPollTimer = null;
-      let conveyorPingPongTimer = null;
-      let conveyorPingPongEnabled = false;
-      let conveyorPingPongDirection = "stopped";
-      let conveyorPingPongBusy = false;
+      let sensorTransferTimer = null;
+      let sensorTransferEnabled = false;
+      let sensorTransferDirection = "stopped";
+      let sensorTransferTarget = null;
+      let sensorTransferBusy = false;
 
       function setMachineStatus(value, state = "idle") {
         const status = document.querySelector(".status");
@@ -2399,53 +2400,75 @@
         }
       }
 
-      function updateConveyorPingPongButton() {
-        const button = document.getElementById("ping-pong-toggle");
+      function updateSensorTransferButton() {
+        const button = document.getElementById("sensor-transfer-toggle");
         if (!button) {
           return;
         }
 
-        button.textContent = conveyorPingPongEnabled ? "Ping Pong On" : "Ping Pong Off";
-        button.classList.toggle("relay-on", conveyorPingPongEnabled);
-        button.classList.toggle("relay-off", !conveyorPingPongEnabled);
+        button.textContent = sensorTransferEnabled ? "Moving..." : "Move To Other Sensor";
+        button.classList.toggle("relay-on", sensorTransferEnabled);
+        button.classList.toggle("relay-off", !sensorTransferEnabled);
       }
 
-      async function toggleConveyorPingPong() {
-        if (conveyorPingPongEnabled) {
-          await stopConveyorPingPong();
+      async function toggleSensorTransfer() {
+        if (sensorTransferEnabled) {
+          await stopSensorTransfer("manual stop");
           return;
         }
 
-        conveyorPingPongEnabled = true;
-        conveyorPingPongDirection = "stopped";
-        updateConveyorPingPongButton();
-        appendTerminalLine("[PING PONG] enabled. Start sensor drives forward; End sensor drives reverse.");
-        await allConveyorRelaysOff({ keepPingPongState: true, writeLog: false });
+        const payload = await readConveyorIoStatusForTransfer();
+        if (!payload) {
+          return;
+        }
 
-        conveyorPingPongTimer = window.setInterval(() => {
-          runConveyorPingPongStep();
+        const startDetected = Boolean(payload.sensors && (payload.sensors[1] || payload.sensors["1"]));
+        const endDetected = Boolean(payload.sensors && (payload.sensors[2] || payload.sensors["2"]));
+
+        if (startDetected && endDetected) {
+          appendTerminalLine("[SENSOR MOVE] both sensors are detected. Clear one sensor before starting.");
+          return;
+        }
+
+        if (!startDetected && !endDetected) {
+          appendTerminalLine("[SENSOR MOVE] no sensor is detected. Place a board at Start or End first.");
+          return;
+        }
+
+        if (startDetected) {
+          sensorTransferDirection = "forward";
+          sensorTransferTarget = "end";
+        } else {
+          sensorTransferDirection = "reverse";
+          sensorTransferTarget = "start";
+        }
+
+        sensorTransferEnabled = true;
+        updateSensorTransferButton();
+        appendTerminalLine(`[SENSOR MOVE] moving ${sensorTransferDirection} until ${sensorTransferTarget} sensor detects.`);
+        await allConveyorRelaysOff({ keepSensorTransferState: true, writeLog: false });
+        await setConveyorRelay(sensorTransferDirection === "forward" ? 1 : 2, true);
+
+        sensorTransferTimer = window.setInterval(() => {
+          runSensorTransferStep();
         }, 150);
-        runConveyorPingPongStep();
+        runSensorTransferStep();
       }
 
-      async function stopConveyorPingPong() {
-        conveyorPingPongEnabled = false;
-        conveyorPingPongDirection = "stopped";
-        if (conveyorPingPongTimer) {
-          window.clearInterval(conveyorPingPongTimer);
-          conveyorPingPongTimer = null;
+      async function stopSensorTransfer(reason = "complete") {
+        sensorTransferEnabled = false;
+        sensorTransferDirection = "stopped";
+        sensorTransferTarget = null;
+        if (sensorTransferTimer) {
+          window.clearInterval(sensorTransferTimer);
+          sensorTransferTimer = null;
         }
-        updateConveyorPingPongButton();
-        await allConveyorRelaysOff({ keepPingPongState: true, writeLog: false });
-        appendTerminalLine("[PING PONG] disabled. Conveyor relays off.");
+        updateSensorTransferButton();
+        await allConveyorRelaysOff({ keepSensorTransferState: true, writeLog: false });
+        appendTerminalLine(`[SENSOR MOVE] stopped: ${reason}.`);
       }
 
-      async function runConveyorPingPongStep() {
-        if (!conveyorPingPongEnabled || conveyorPingPongBusy) {
-          return;
-        }
-
-        conveyorPingPongBusy = true;
+      async function readConveyorIoStatusForTransfer() {
         try {
           const response = await fetch("/api/conveyor-relay-status");
           const payload = await response.json();
@@ -2454,60 +2477,43 @@
           }
 
           updateConveyorIoStatus(payload);
+          return payload;
+        } catch (error) {
+          appendTerminalLine(`[SENSOR MOVE ERROR] status failed: ${error.message}`);
+          return null;
+        }
+      }
+
+      async function runSensorTransferStep() {
+        if (!sensorTransferEnabled || sensorTransferBusy) {
+          return;
+        }
+
+        sensorTransferBusy = true;
+        try {
+          const payload = await readConveyorIoStatusForTransfer();
+          if (!payload) {
+            await stopSensorTransfer("sensor status failed");
+            return;
+          }
 
           const startDetected = Boolean(payload.sensors && (payload.sensors[1] || payload.sensors["1"]));
           const endDetected = Boolean(payload.sensors && (payload.sensors[2] || payload.sensors["2"]));
 
-          if (conveyorPingPongDirection === "forward") {
-            if (endDetected) {
-              await setConveyorPingPongDirection("reverse", "end detected");
-            }
+          if (sensorTransferTarget === "end" && endDetected) {
+            await stopSensorTransfer("end sensor reached");
             return;
           }
 
-          if (conveyorPingPongDirection === "reverse") {
-            if (startDetected) {
-              await setConveyorPingPongDirection("forward", "start detected");
-            }
-            return;
-          }
-
-          if (startDetected && !endDetected) {
-            await setConveyorPingPongDirection("forward", "start detected");
-            return;
-          }
-
-          if (endDetected && !startDetected) {
-            await setConveyorPingPongDirection("reverse", "end detected");
-            return;
-          }
-
-          if (startDetected && endDetected) {
-            await setConveyorPingPongDirection("stopped", "both sensors detected before direction was chosen");
+          if (sensorTransferTarget === "start" && startDetected) {
+            await stopSensorTransfer("start sensor reached");
           }
         } catch (error) {
-          appendTerminalLine(`[PING PONG ERROR] ${error.message}`);
-          await stopConveyorPingPong();
+          appendTerminalLine(`[SENSOR MOVE ERROR] ${error.message}`);
+          await stopSensorTransfer("error");
         } finally {
-          conveyorPingPongBusy = false;
+          sensorTransferBusy = false;
         }
-      }
-
-      async function setConveyorPingPongDirection(direction, reason) {
-        if (direction === conveyorPingPongDirection) {
-          return;
-        }
-
-        conveyorPingPongDirection = direction;
-        if (direction === "forward") {
-          await setConveyorRelay(1, true);
-        } else if (direction === "reverse") {
-          await setConveyorRelay(2, true);
-        } else {
-          await allConveyorRelaysOff({ keepPingPongState: true, writeLog: false });
-        }
-
-        appendTerminalLine(`[PING PONG] ${reason}; direction=${direction}.`);
       }
 
       async function refreshConveyorIoStatus(writeLog = true) {
@@ -2559,16 +2565,17 @@
       }
 
       async function allConveyorRelaysOff(options = {}) {
-        const keepPingPongState = Boolean(options.keepPingPongState);
+        const keepSensorTransferState = Boolean(options.keepSensorTransferState);
         const writeLog = options.writeLog !== false;
-        if (!keepPingPongState && conveyorPingPongEnabled) {
-          conveyorPingPongEnabled = false;
-          conveyorPingPongDirection = "stopped";
-          if (conveyorPingPongTimer) {
-            window.clearInterval(conveyorPingPongTimer);
-            conveyorPingPongTimer = null;
+        if (!keepSensorTransferState && sensorTransferEnabled) {
+          sensorTransferEnabled = false;
+          sensorTransferDirection = "stopped";
+          sensorTransferTarget = null;
+          if (sensorTransferTimer) {
+            window.clearInterval(sensorTransferTimer);
+            sensorTransferTimer = null;
           }
-          updateConveyorPingPongButton();
+          updateSensorTransferButton();
         }
 
         try {
