@@ -2458,18 +2458,32 @@
           const startDetected = Boolean(payload.sensors && (payload.sensors[1] || payload.sensors["1"]));
           const endDetected = Boolean(payload.sensors && (payload.sensors[2] || payload.sensors["2"]));
 
-          if (startDetected && endDetected) {
-            await setConveyorPingPongDirection("stopped", "both sensors detected");
+          if (conveyorPingPongDirection === "forward") {
+            if (endDetected) {
+              await setConveyorPingPongDirection("reverse", "end detected");
+            }
             return;
           }
 
-          if (startDetected) {
+          if (conveyorPingPongDirection === "reverse") {
+            if (startDetected) {
+              await setConveyorPingPongDirection("forward", "start detected");
+            }
+            return;
+          }
+
+          if (startDetected && !endDetected) {
             await setConveyorPingPongDirection("forward", "start detected");
             return;
           }
 
-          if (endDetected) {
+          if (endDetected && !startDetected) {
             await setConveyorPingPongDirection("reverse", "end detected");
+            return;
+          }
+
+          if (startDetected && endDetected) {
+            await setConveyorPingPongDirection("stopped", "both sensors detected before direction was chosen");
           }
         } catch (error) {
           appendTerminalLine(`[PING PONG ERROR] ${error.message}`);
