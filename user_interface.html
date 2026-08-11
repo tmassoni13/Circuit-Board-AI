@@ -406,6 +406,18 @@
         font-size: 11px;
       }
 
+      .close-app-button {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        min-height: 30px;
+        padding: 0;
+        border-color: #bd2d2d;
+        background: #7b1d1d;
+        font-size: 14px;
+        font-weight: 900;
+      }
+
       .feed {
         display: grid;
         place-items: center;
@@ -1145,6 +1157,7 @@
           <div class="topbar-actions">
             <button class="capture-button" type="button" onclick="captureStillImage()">Manual Capture</button>
             <div class="topbar-meta" id="camera-meta">ELP USB Camera | Test Mode</div>
+            <button class="close-app-button" type="button" onclick="confirmCloseApplication()" aria-label="Close app">X</button>
           </div>
         </div>
         <div class="feed">
@@ -2317,6 +2330,37 @@
           setMachineStatus("OFF", "idle");
           appendTerminalLine("[SYSTEM] Auto mode stopped.");
         }, 900);
+      }
+
+      function confirmCloseApplication() {
+        if (window.confirm("Close PCB AI? Conveyor motion will stop and the app window will close.")) {
+          closeApplication();
+        }
+      }
+
+      async function closeApplication() {
+        appendTerminalLine("[SYSTEM] Closing app.");
+        stopMachine();
+        try {
+          await allConveyorRelaysOff({ writeLog: false });
+        } catch (error) {
+          appendTerminalLine(`[CONVEYOR ERROR] close relay shutdown failed: ${error.message}`);
+        }
+
+        try {
+          const response = await fetch("/api/close-app", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}"
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+        } catch (error) {
+          appendTerminalLine(`[SYSTEM ERROR] close request failed: ${error.message}`);
+          window.close();
+        }
       }
 
       function appendTerminalLine(line) {

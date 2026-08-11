@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import subprocess
 import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
@@ -182,6 +183,27 @@ class ConveyorIoController:
 
 
 CONVEYOR_IO = ConveyorIoController()
+
+
+def close_kiosk_browser() -> None:
+    """Close the local browser window that is displaying the inspector UI.
+
+    The UI server should keep running as a systemd service so the desktop icon
+    can reopen the app quickly. Only the Chromium/Chrome kiosk process is
+    closed here.
+    """
+    browser_patterns = [
+        "chromium-browser.*user_interface.html",
+        "chromium.*user_interface.html",
+        "google-chrome.*user_interface.html",
+    ]
+    for pattern in browser_patterns:
+        try:
+            subprocess.call(["pkill", "-f", pattern])
+        except Exception:
+            # Closing the browser is a convenience action. If one command is
+            # unavailable on a platform, try the remaining browser patterns.
+            pass
 
 
 def test_axis(
@@ -460,6 +482,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                 "/api/conveyor-relay",
                 "/api/conveyor-relay-all-off",
                 "/api/conveyor-sensor-logic",
+                "/api/close-app",
             }:
                 self.send_error(404, "Unknown endpoint")
                 return
@@ -491,6 +514,15 @@ def serve_ui(host: str, port: int, root: Path) -> None:
 
                 if endpoint == "/api/conveyor-sensor-logic":
                     self.send_json(200, CONVEYOR_IO.set_sensor_active_low(bool(payload.get("active_low"))))
+                    return
+
+                if endpoint == "/api/close-app":
+                    try:
+                        CONVEYOR_IO.all_off()
+                    except Exception:
+                        pass
+                    self.send_json(200, {"closing": True})
+                    threading.Timer(0.25, close_kiosk_browser).start()
                     return
             except Exception as error:
                 self.send_json(500, {"error": str(error)})
