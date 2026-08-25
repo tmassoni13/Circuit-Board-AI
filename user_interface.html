@@ -1335,18 +1335,21 @@
       const GEMINI_UPLOAD_QUALITY_OPTIONS = {
         full: {
           label: "Full",
-          maxDimension: Infinity
+          maxDimension: Infinity,
+          jpegQuality: 0.98
         },
         fast: {
           label: "Fast",
-          maxDimension: 3000
+          maxDimension: 2400,
+          jpegQuality: 0.9
         },
         "ultra-fast": {
           label: "Ultra Fast",
-          maxDimension: 1800
+          maxDimension: 1200,
+          jpegQuality: 0.78
         }
       };
-      const GEMINI_ANALYSIS_JPEG_QUALITY = 0.98;
+      const GEMINI_ANALYSIS_TIMEOUT_MS = 120000;
       const CAPTURE_SCAN_SIGN_X = -1;
       const CAPTURE_SCAN_SIGN_Y = 1;
       const AXIS_ABSOLUTE_MIN_X_MM = -180;
@@ -3037,8 +3040,9 @@
           for (const image of capturedImages) {
             images.push(await blobToGeminiImage(image.blob, image.name));
           }
+          appendTerminalLine(`[GEMINI] upload prepared. Sending request to Gemini.`);
 
-          const response = await fetch("/api/analyze-board", {
+          const response = await fetchWithTimeout("/api/analyze-board", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -3047,7 +3051,7 @@
               prompt_context: promptContext,
               images
             })
-          });
+          }, GEMINI_ANALYSIS_TIMEOUT_MS);
 
           const result = await response.json();
           if (!response.ok) {
@@ -3067,16 +3071,21 @@
         const resizedBlob = await resizeImageBlobForAnalysis(blob);
         const dataUrl = await blobToDataUrl(resizedBlob);
         const commaIndex = dataUrl.indexOf(",");
+        const data = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+        appendTerminalLine(
+          `[GEMINI] ${imageName} original=${formatBytes(blob.size)} prepared=${formatBytes(resizedBlob.size)} payload=${formatBytes(data.length)}.`
+        );
         return {
           name: imageName,
           mime_type: resizedBlob.type || "image/jpeg",
-          data: commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl
+          data
         };
       }
 
       function resizeImageBlobForAnalysis(blob) {
         const quality = readGeminiUploadQuality();
-        const maxDimension = GEMINI_UPLOAD_QUALITY_OPTIONS[quality].maxDimension;
+        const option = GEMINI_UPLOAD_QUALITY_OPTIONS[quality];
+        const maxDimension = option.maxDimension;
 
         if (!Number.isFinite(maxDimension)) {
           return Promise.resolve(blob);
@@ -3108,7 +3117,7 @@
                 }
               },
               "image/jpeg",
-              GEMINI_ANALYSIS_JPEG_QUALITY
+              option.jpegQuality
             );
           };
 
@@ -3119,6 +3128,29 @@
 
           image.src = objectUrl;
         });
+      }
+
+      function fetchWithTimeout(url, options, timeoutMs) {
+        if (typeof AbortController === "undefined") {
+          return fetch(url, options);
+        }
+
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+        return fetch(url, { ...options, signal: controller.signal })
+          .finally(() => window.clearTimeout(timeout));
+      }
+
+      function formatBytes(bytes) {
+        if (!Number.isFinite(bytes)) {
+          return "?";
+        }
+
+        if (bytes >= 1024 * 1024) {
+          return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+        }
+
+        return `${Math.round(bytes / 1024)}KB`;
       }
 
       function blobToDataUrl(blob) {
