@@ -22,7 +22,7 @@ CONVEYOR_RELAY_OUTPUT_PINS = {
 }
 CONVEYOR_SENSOR_INPUT_PINS = {
     1: 31,
-    2: 27,
+    2: 37,
     3: 29,
 }
 # The Omron E3Z-D61 sensor interface is expected to provide a safe 0-3.3 V
@@ -46,7 +46,7 @@ class ConveyorIoController:
     - pin 33: conveyor forward relay output
     - pin 35: conveyor reverse relay output
     - pin 31: start diffuse reflective sensor
-    - pin 27: camera/imaging diffuse reflective sensor
+    - pin 37: camera/imaging diffuse reflective sensor
     - pin 29: end diffuse reflective sensor
 
     Relay ON currently means the output pin is driven HIGH. If the installed
