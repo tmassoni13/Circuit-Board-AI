@@ -1205,6 +1205,14 @@
                           <label for="auto-capture-folder">Current Folder</label>
                           <select id="auto-capture-folder" onchange="autoApplySettings()"></select>
                         </div>
+                        <div class="field">
+                          <label for="gemini-upload-quality">Gemini Upload</label>
+                          <select id="gemini-upload-quality" onchange="autoApplySettings()">
+                            <option value="full">Full</option>
+                            <option value="fast">Fast</option>
+                            <option value="ultra-fast">Ultra Fast</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -1323,7 +1331,21 @@
       const CAPTURE_PRE_IMAGE_SETTLE_MS = 1000;
       const CAPTURE_SECOND_IMAGE_PRE_SETTLE_MS = 2000;
       const CAPTURE_POST_IMAGE_SETTLE_MS = 1000;
-      const GEMINI_ANALYSIS_IMAGE_MAX_DIMENSION = Infinity;
+      const DEFAULT_GEMINI_UPLOAD_QUALITY = "full";
+      const GEMINI_UPLOAD_QUALITY_OPTIONS = {
+        full: {
+          label: "Full",
+          maxDimension: Infinity
+        },
+        fast: {
+          label: "Fast",
+          maxDimension: 3000
+        },
+        "ultra-fast": {
+          label: "Ultra Fast",
+          maxDimension: 1800
+        }
+      };
       const GEMINI_ANALYSIS_JPEG_QUALITY = 0.98;
       const CAPTURE_SCAN_SIGN_X = -1;
       const CAPTURE_SCAN_SIGN_Y = 1;
@@ -1480,6 +1502,10 @@
           saved.backgroundColor ||
           legacyBackgroundColor(saved) ||
           DEFAULT_BOARD_BACKGROUND_COLOR;
+        document.getElementById("gemini-upload-quality").value =
+          GEMINI_UPLOAD_QUALITY_OPTIONS[saved.geminiUploadQuality]
+            ? saved.geminiUploadQuality
+            : DEFAULT_GEMINI_UPLOAD_QUALITY;
         loadSavedImageFolders();
         autoCaptureFolderName = saved.autoCaptureFolderName || DEFAULT_IMAGE_FOLDER_NAME;
         loadFolderPromptSettings();
@@ -1500,8 +1526,15 @@
           backgroundR: backgroundRgb.r,
           backgroundG: backgroundRgb.g,
           backgroundB: backgroundRgb.b,
-          autoCaptureFolderName
+          autoCaptureFolderName,
+          geminiUploadQuality: readGeminiUploadQuality()
         };
+      }
+
+      function readGeminiUploadQuality() {
+        const select = document.getElementById("gemini-upload-quality");
+        const quality = select ? select.value : DEFAULT_GEMINI_UPLOAD_QUALITY;
+        return GEMINI_UPLOAD_QUALITY_OPTIONS[quality] ? quality : DEFAULT_GEMINI_UPLOAD_QUALITY;
       }
 
       function clampNumberInput(id, min, max, fallback) {
@@ -1550,6 +1583,7 @@
         document.getElementById("camera-fov-width-mm").value = DEFAULT_CAMERA_FOV_WIDTH_MM;
         document.getElementById("camera-fov-height-mm").value = DEFAULT_CAMERA_FOV_HEIGHT_MM;
         document.getElementById("board-background-color").value = DEFAULT_BOARD_BACKGROUND_COLOR;
+        document.getElementById("gemini-upload-quality").value = DEFAULT_GEMINI_UPLOAD_QUALITY;
         autoCaptureFolderName = DEFAULT_IMAGE_FOLDER_NAME;
         renderAutoCaptureFolderSelect();
         persistSettings(true);
@@ -2991,7 +3025,13 @@
 
         try {
           setMachineStatus("ANALYZING", "searching");
-          appendTerminalLine(`[GEMINI] analyzing board ${boardNumber} with ${capturedImages.length} image(s).`);
+          const uploadQuality = GEMINI_UPLOAD_QUALITY_OPTIONS[readGeminiUploadQuality()];
+          const uploadSize = Number.isFinite(uploadQuality.maxDimension)
+            ? `${uploadQuality.maxDimension}px max side`
+            : "full image";
+          appendTerminalLine(
+            `[GEMINI] analyzing board ${boardNumber} with ${capturedImages.length} image(s). upload=${uploadQuality.label} ${uploadSize}.`
+          );
 
           const images = [];
           for (const image of capturedImages) {
@@ -3035,7 +3075,10 @@
       }
 
       function resizeImageBlobForAnalysis(blob) {
-        if (!Number.isFinite(GEMINI_ANALYSIS_IMAGE_MAX_DIMENSION)) {
+        const quality = readGeminiUploadQuality();
+        const maxDimension = GEMINI_UPLOAD_QUALITY_OPTIONS[quality].maxDimension;
+
+        if (!Number.isFinite(maxDimension)) {
           return Promise.resolve(blob);
         }
 
@@ -3045,8 +3088,8 @@
 
           image.onload = () => {
             const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
-            const scale = largestSide > GEMINI_ANALYSIS_IMAGE_MAX_DIMENSION
-              ? GEMINI_ANALYSIS_IMAGE_MAX_DIMENSION / largestSide
+            const scale = largestSide > maxDimension
+              ? maxDimension / largestSide
               : 1;
             const width = Math.max(1, Math.round(image.naturalWidth * scale));
             const height = Math.max(1, Math.round(image.naturalHeight * scale));
