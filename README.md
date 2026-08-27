@@ -29,6 +29,20 @@ The browser UI expects the external ELP / 48MP USB inspection camera. On the
 Jetson Nano, plug the camera directly into one USB port and the CH340 GRBL axis
 controller into another USB port.
 
+Current conveyor IO pinout uses physical Jetson header pin numbers:
+
+```text
+Conveyor forward relay: pin 33
+Conveyor reverse relay: pin 35
+Start sensor: pin 31
+Camera/imaging sensor: pin 37
+End sensor: pin 29
+```
+
+The Omron E3Z-D61 sensor signals are expected to be reduced to Jetson-safe
+0-3.3 V levels before they reach GPIO. The app configures those input pins with
+no internal pull resistor so the external divider is not distorted.
+
 ## Jetson Nano Startup
 
 Clone the GitHub repo onto the Jetson Nano, then install the app once:
@@ -49,6 +63,9 @@ The installed services start automatically when the Jetson boots:
 
 The UI does not auto-open on boot anymore. Open it from the `PCB AI` desktop
 icon when you are ready to run the machine.
+
+Press `Ctrl+Q` inside the app to close the kiosk browser. The UI server keeps
+running so the `PCB AI` desktop icon can open it again.
 
 ## Gemini AI Inspection
 
@@ -163,16 +180,22 @@ python -m pcb_inspector.main axis-bridge --port COM4
 4. Start the UI server and open Chromium.
 5. Put the camera near the center of the usable axis area.
 6. Enter the incoming board width/height and camera FOV width/height.
-7. Click `SET ZERO`.
-8. Click `START`.
+7. Click `START`.
 
-The interface checks the axis and camera before searching. If either one is not
-connected, machine status turns red and movement does not start.
+The interface checks the axis and camera before searching. When `START` is
+clicked, the current axis position is treated as X0/Y0 for that run. If either
+the axis or camera is not connected, machine status turns red and movement does
+not start.
 
 The board and FOV settings define whether the 2D axis needs to move. If the
 camera FOV is larger than the board, the app holds at X0/Y0. If the board is
 larger than the FOV, the app searches only the extra travel needed to cover the
 board, capped by the configured machine safety limits.
+
+Manual captures always save to `Manual Captures`. Automatic captures save to
+the selected current folder. Pass/fail counts are calculated from analyzed
+images in the currently selected folder; copied images in `Failures` are not
+counted separately.
 
 ## Manual Axis Commands
 

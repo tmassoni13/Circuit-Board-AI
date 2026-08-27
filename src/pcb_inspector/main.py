@@ -49,8 +49,9 @@ class ConveyorIoController:
     - pin 37: camera/imaging diffuse reflective sensor
     - pin 29: end diffuse reflective sensor
 
-    Relay ON currently means the output pin is driven HIGH. If the installed
-    relay board is active-low, flip `relay_active_low` in one place.
+    Relay ON currently drives the output pin LOW because the installed relay
+    board is active-low. If the relay hardware changes, flip
+    `relay_active_low` in one place.
     """
 
     def __init__(self, relay_active_low=CONVEYOR_RELAY_ACTIVE_LOW, sensor_active_low=CONVEYOR_SENSOR_ACTIVE_LOW):
