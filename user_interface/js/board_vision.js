@@ -134,6 +134,26 @@
         };
       }
 
+      function updateSelectedColorBoardOverlay() {
+        const video = document.getElementById("webcam-preview");
+        if (!video || !video.videoWidth || !video.videoHeight) {
+          clearBoardOverlay();
+          return null;
+        }
+
+        const board = findBoardBySelectedColor(video);
+        if (!board) {
+          lastBoardBox = null;
+          clearBoardOverlay();
+          return null;
+        }
+
+        const smoothedBoard = smoothedBoardOverlay(board);
+        lastBoardBox = smoothedBoard;
+        drawBoardOverlay(smoothedBoard, board.confidence >= BOARD_MIN_CONFIDENCE);
+        return board;
+      }
+
       function boardPixelMatches(red, green, blue, targetRgb, targetHsl) {
         const color = rgbToHsl(red, green, blue);
         const redDelta = red - targetRgb.red;

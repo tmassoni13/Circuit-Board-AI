@@ -210,6 +210,9 @@ async function captureBoardImageSet(options = {}) {
           }
 
           missingEdgeFrames = 0;
+          const smoothedBoard = smoothedBoardOverlay(board);
+          lastBoardBox = smoothedBoard;
+          drawBoardOverlay(smoothedBoard, board.confidence >= BOARD_MIN_CONFIDENCE);
           const edgeOffset = visibleBoardEdgeOffset(board, video, edge);
           const absOffset = Math.abs(edgeOffset);
 

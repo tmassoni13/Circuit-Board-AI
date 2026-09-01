@@ -75,6 +75,7 @@
         const startDetected = sensorIsDetected(payload.sensors, CONVEYOR_START_SENSOR_CHANNEL);
         const cameraDetected = sensorIsDetected(payload.sensors, CONVEYOR_CAMERA_SENSOR_CHANNEL);
         const endDetected = sensorIsDetected(payload.sensors, CONVEYOR_END_SENSOR_CHANNEL);
+        updateSelectedColorBoardOverlay();
 
         if (autoConveyorState === "searching") {
           if (cameraDetected) {
