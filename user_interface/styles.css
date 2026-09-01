@@ -168,6 +168,61 @@
         max-width: 520px;
       }
 
+      .axis-jog-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 76px);
+        gap: 8px;
+        align-items: center;
+      }
+
+      .axis-jog {
+        width: 76px;
+        height: 52px;
+        min-height: 52px;
+        padding: 0;
+        border: 0;
+        background: #1f2933;
+        color: #f8fafc;
+        font-size: 10px;
+        font-weight: 900;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .axis-jog.home {
+        width: 76px;
+        height: 40px;
+        min-height: 40px;
+        border: 2px solid #64748b;
+        border-color: #64748b;
+        background: #111820;
+      }
+
+      .axis-jog-up {
+        clip-path: polygon(50% 0, 100% 100%, 0 100%);
+        padding-top: 18px;
+      }
+
+      .axis-jog-down {
+        clip-path: polygon(0 0, 100% 0, 50% 100%);
+        padding-bottom: 18px;
+      }
+
+      .axis-jog-left {
+        clip-path: polygon(0 50%, 100% 0, 100% 100%);
+        padding-left: 20px;
+      }
+
+      .axis-jog-right {
+        clip-path: polygon(0 0, 100% 50%, 0 100%);
+        padding-right: 20px;
+      }
+
+      .axis-jog.spacer {
+        visibility: hidden;
+        pointer-events: none;
+      }
+
       .relay-row {
         display: grid;
         grid-template-columns: 76px minmax(120px, 1fr);

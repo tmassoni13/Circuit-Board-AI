@@ -91,12 +91,12 @@
 
           if (startDetected) {
             ignoreEndSensorUntilNextBoard = false;
-            await beginAutoConveyorMove("forward", "camera", "start sensor detected");
+            await moveBoardToCameraWithBackendStop("forward", "start sensor detected");
             return;
           }
 
           if (endDetected && !startDetected && !ignoreEndSensorUntilNextBoard) {
-            await beginAutoConveyorMove("reverse", "camera", "end sensor detected");
+            await moveBoardToCameraWithBackendStop("reverse", "end sensor detected");
             return;
           }
 
@@ -150,6 +150,29 @@
         appendTerminalLine(`[CONVEYOR] ${reason}. Moving ${direction} to ${target} sensor.`);
         await allConveyorRelaysOff({ keepSensorTransferState: true, writeLog: false });
         await setConveyorRelay(direction === "forward" ? 1 : 2, true);
+      }
+
+      async function moveBoardToCameraWithBackendStop(direction, reason) {
+        autoConveyorState = "moving_to_camera";
+        autoConveyorMoveDirection = direction;
+        setMachineStatus("MOVING TO CAMERA", "searching");
+        appendTerminalLine(`[CONVEYOR] ${reason}. Moving ${direction} until Camera sensor detects.`);
+
+        const payload = await moveConveyorUntilSensor(
+          direction,
+          CONVEYOR_CAMERA_SENSOR_CHANNEL,
+          CONVEYOR_MOVE_TO_CAMERA_TIMEOUT_MS
+        );
+        appendTerminalLine(
+          `[BOARD] board reached camera sensor in ${payload.elapsed_seconds}s. Waiting for board to settle.`
+        );
+
+        autoConveyorMoveDirection = "stopped";
+        if (!await waitForBoardAtCameraSettle()) {
+          return;
+        }
+
+        await beginBoardWorkflow(null);
       }
 
       async function stopAutoConveyorMotion(fast = false) {

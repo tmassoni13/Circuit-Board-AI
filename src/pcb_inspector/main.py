@@ -157,6 +157,56 @@ class ConveyorIoController:
                 "initialized": self._initialized,
             }
 
+    def move_until_sensor(self, direction_channel, target_sensor, timeout_seconds=20.0):
+        """Drive the conveyor until the requested sensor detects a board.
+
+        Browser-side polling is too slow for stopping accurately at the camera
+        sensor. This method keeps the control loop on the Jetson process: it
+        starts one direction relay, checks the target sensor every few
+        milliseconds, and cuts both direction relays as soon as the target
+        sensor becomes active.
+        """
+        direction_channel = int(direction_channel)
+        target_sensor = int(target_sensor)
+        if direction_channel not in CONVEYOR_RELAY_OUTPUT_PINS:
+            raise ValueError("Direction channel must be 1 or 2.")
+        if target_sensor not in CONVEYOR_SENSOR_INPUT_PINS:
+            raise ValueError("Unknown target sensor.")
+
+        start_time = time.monotonic()
+        with self._lock:
+            self._ensure_initialized()
+            for channel in CONVEYOR_RELAY_OUTPUT_PINS:
+                self._set_channel_unlocked(channel, False)
+            self._set_channel_unlocked(direction_channel, True)
+
+        try:
+            while time.monotonic() - start_time < timeout_seconds:
+                sensors = self.read_sensors()
+                if sensors.get(target_sensor, False):
+                    stopped = self.all_off_fast()
+                    return {
+                        **stopped,
+                        "target_reached": True,
+                        "target_sensor": target_sensor,
+                        "elapsed_seconds": round(time.monotonic() - start_time, 3),
+                        "sensors": sensors,
+                    }
+                time.sleep(0.005)
+
+            stopped = self.all_off_fast()
+            return {
+                **stopped,
+                "target_reached": False,
+                "target_sensor": target_sensor,
+                "elapsed_seconds": round(time.monotonic() - start_time, 3),
+                "sensors": self.read_sensors(),
+                "error": "target sensor timeout",
+            }
+        except Exception:
+            self.all_off_fast()
+            raise
+
     def set_sensor_active_low(self, active_low):
         with self._lock:
             self.sensor_active_low = bool(active_low)
@@ -502,6 +552,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                 "/api/conveyor-relay",
                 "/api/conveyor-relay-all-off",
                 "/api/conveyor-relay-all-off-fast",
+                "/api/conveyor-move-until-sensor",
                 "/api/conveyor-sensor-logic",
                 "/api/close-app",
             }:
@@ -535,6 +586,19 @@ def serve_ui(host: str, port: int, root: Path) -> None:
 
                 if endpoint == "/api/conveyor-relay-all-off-fast":
                     self.send_json(200, CONVEYOR_IO.all_off_fast())
+                    return
+
+                if endpoint == "/api/conveyor-move-until-sensor":
+                    direction_channel = int(payload.get("direction_channel"))
+                    target_sensor = int(payload.get("target_sensor"))
+                    timeout_seconds = float(payload.get("timeout_seconds", 20.0))
+                    result = CONVEYOR_IO.move_until_sensor(
+                        direction_channel,
+                        target_sensor,
+                        timeout_seconds=timeout_seconds,
+                    )
+                    status_code = 200 if result.get("target_reached") else 408
+                    self.send_json(status_code, result)
                     return
 
                 if endpoint == "/api/conveyor-sensor-logic":

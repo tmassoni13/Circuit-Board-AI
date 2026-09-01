@@ -98,6 +98,7 @@
       const CAMERA_READY_TIMEOUT_MS = 2500;
       const AXIS_BRIDGE_REQUEST_TIMEOUT_MS = 2500;
       const AUTO_CONVEYOR_POLL_INTERVAL_MS = 75;
+      const CONVEYOR_MOVE_TO_CAMERA_TIMEOUT_MS = 20000;
       const CAMERA_SENSOR_SETTLE_MS = 1000;
 
       let autoScanTimer = null;

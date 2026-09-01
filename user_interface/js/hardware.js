@@ -484,6 +484,37 @@
         }
       }
 
+      async function moveConveyorUntilSensor(direction, targetSensor, timeoutMs = CONVEYOR_MOVE_TO_CAMERA_TIMEOUT_MS) {
+        const directionChannel = direction === "forward" ? 1 : 2;
+        await allConveyorRelaysOffFast();
+        setRelayButtonVisual(directionChannel, true, true);
+
+        try {
+          const response = await fetchWithTimeout("/api/conveyor-move-until-sensor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              direction_channel: directionChannel,
+              target_sensor: targetSensor,
+              timeout_seconds: timeoutMs / 1000
+            })
+          }, timeoutMs + 1000);
+          const payload = await response.json();
+          if (!response.ok || !payload.target_reached) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+
+          relayPendingStates = {};
+          updateConveyorRelayButtons(payload.states || {}, { force: true });
+          updateConveyorSensorIndicators(payload.sensors || {}, payload.sensor_raw_levels || {});
+          return payload;
+        } catch (error) {
+          relayPendingStates = {};
+          await allConveyorRelaysOffFast();
+          throw error;
+        }
+      }
+
       async function stopExistingPreview(video) {
         // Explicitly stop old tracks before reconnecting so Chromium does not
         // keep the USB inspection camera locked after a UI refresh.
@@ -585,6 +616,49 @@
         }
 
         return payload;
+      }
+
+      async function jogAxis(xMm, yMm) {
+        if (!axisBridgeConnected) {
+          await connectAxis();
+        }
+
+        if (!axisBridgeConnected) {
+          appendTerminalLine("[AXIS] Cannot jog. Axis bridge is not connected.");
+          return;
+        }
+
+        try {
+          const payload = await postAxis("/axis/move", {
+            x_mm: xMm,
+            y_mm: yMm,
+            feed_mm_min: SEARCH_FEED_MM_MIN
+          });
+          const delta = payload.delta || {};
+          appendTerminalLine(
+            `[AXIS] jog requested X=${xMm.toFixed(1)} Y=${yMm.toFixed(1)} measured X=${Number(delta.x_mm || 0).toFixed(2)} Y=${Number(delta.y_mm || 0).toFixed(2)}`
+          );
+        } catch (error) {
+          appendTerminalLine(`[AXIS ERROR] jog failed: ${error.message}`);
+        }
+      }
+
+      async function moveAxisHome() {
+        if (!axisBridgeConnected) {
+          await connectAxis();
+        }
+
+        if (!axisBridgeConnected) {
+          appendTerminalLine("[AXIS] Cannot move home. Axis bridge is not connected.");
+          return;
+        }
+
+        try {
+          await moveAxisToCaptureTarget({ xMm: 0, yMm: 0, imageNumber: 0 });
+          appendTerminalLine("[AXIS] moved to X0 Y0.");
+        } catch (error) {
+          appendTerminalLine(`[AXIS ERROR] home move failed: ${error.message}`);
+        }
       }
 
       async function testAxisMove() {
