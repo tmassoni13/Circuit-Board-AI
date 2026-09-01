@@ -5,7 +5,7 @@ Current test build for the PCB camera/2D-axis alignment station.
 This version is intentionally small. It keeps only the pieces being used right
 now:
 
-- the browser interface in `user_interface.html`
+- the browser interface in `user_interface/`
 - the local GRBL axis bridge
 - manual GRBL axis test commands
 - tiny GRBL serial-number engraving G-code generation
@@ -13,6 +13,26 @@ now:
 
 Old simulated inspection, ZED/Basler placeholders, YOLO training helpers, and
 server dashboard code have been removed.
+
+## UI Source Layout
+
+The browser app lives in `user_interface/`:
+
+```text
+user_interface/index.html          Page structure
+user_interface/styles.css          Industrial touchscreen styling
+user_interface/js/config.js        Constants and shared runtime state
+user_interface/js/machine_controls.js
+user_interface/js/settings.js
+user_interface/js/image_log.js
+user_interface/js/hardware.js      Conveyor, GPIO, axis, and camera hooks
+user_interface/js/capture_gemini.js
+user_interface/js/inspection_results.js
+user_interface/js/capture_sequence.js
+user_interface/js/auto_conveyor.js
+user_interface/js/board_vision.js
+user_interface/js/boot.js          Startup calls
+```
 
 ## Hardware Used Right Now
 
@@ -159,7 +179,7 @@ The installer handles these automatically, but they are useful while debugging:
 ```bash
 python3 -m pcb_inspector.main axis-bridge
 python3 -m pcb_inspector.main serve-ui
-chromium-browser --kiosk http://127.0.0.1:5500/user_interface.html
+chromium-browser --kiosk http://127.0.0.1:5500/user_interface/
 ```
 
 ## Windows Development Startup
@@ -186,6 +206,20 @@ The interface checks the axis and camera before searching. When `START` is
 clicked, the current axis position is treated as X0/Y0 for that run. If either
 the axis or camera is not connected, machine status turns red and movement does
 not start.
+
+Automatic mode is sensor driven:
+
+1. If a board is already on the Camera sensor, the conveyor stops and imaging
+   starts.
+2. If a board is on the Start sensor, the conveyor moves forward until the
+   Camera sensor detects it.
+3. If a board is on the End sensor at startup, the conveyor reverses until the
+   Camera sensor detects it.
+4. Once imaging is complete, Gemini analysis starts in the background.
+5. The conveyor moves the inspected board forward to the End sensor.
+6. After the board reaches End, the app waits for the next board on Start or
+   Camera. The completed board sitting at End is ignored so it is not pulled
+   back into the camera station.
 
 The board and FOV settings define whether the 2D axis needs to move. If the
 camera FOV is larger than the board, the app holds at X0/Y0. If the board is
