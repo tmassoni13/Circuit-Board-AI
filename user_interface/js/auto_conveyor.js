@@ -125,6 +125,11 @@
           }
           return;
         }
+
+        if (autoConveyorState === "capture_error") {
+          await stopAutoConveyorMotion();
+          return;
+        }
       }
 
       async function beginAutoConveyorMove(direction, target, reason) {
@@ -159,7 +164,11 @@
         try {
           if (!capturePlan.requiresAxisTravel) {
             appendTerminalLine("[BOARD] board fits inside FOV. Holding X0 Y0 for single image.");
-            await captureBoardImageSet({ awaitAnalysis: false });
+            const captureComplete = await captureBoardImageSet({ awaitAnalysis: false });
+            if (!captureComplete) {
+              await holdBoardAtCameraAfterCaptureFailure();
+              return;
+            }
             await moveCapturedBoardToEnd();
             return;
           }
@@ -169,16 +178,29 @@
           );
           setMachineStatus("ALIGNING CORNER", "searching");
 
-          await captureBoardImageSet({
+          const captureComplete = await captureBoardImageSet({
             requireMachineRunning: true,
             logPrefix: "AUTO CAPTURE",
             alignFromCamera: true,
             awaitAnalysis: false
           });
+          if (!captureComplete) {
+            await holdBoardAtCameraAfterCaptureFailure();
+            return;
+          }
           await moveCapturedBoardToEnd();
         } finally {
           boardWorkflowInProgress = false;
         }
+      }
+
+      async function holdBoardAtCameraAfterCaptureFailure() {
+        autoConveyorState = "capture_error";
+        autoConveyorMoveDirection = "stopped";
+        waitingForNextBoard = false;
+        appendTerminalLine("[BOARD] Imaging did not complete. Board held at camera sensor.");
+        setMachineStatus("CAPTURE ERROR", "error");
+        await stopAutoConveyorMotion();
       }
 
       async function moveCapturedBoardToEnd() {

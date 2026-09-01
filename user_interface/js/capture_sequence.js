@@ -11,7 +11,7 @@
 
         if (!axisBridgeConnected && capturePlan.requiresAxisTravel) {
           appendTerminalLine("[ERROR] Cannot run multi-image board capture. 2D axis is not connected.");
-          return;
+          return false;
         }
 
         setMachineStatus("CAPTURING", "running");
@@ -26,14 +26,14 @@
           const alignedOrigin = await alignCameraToVisibleBoardCorner(logPrefix);
           if (!alignedOrigin) {
             setMachineStatus("CORNER ALIGN FAILED", "error");
-            return;
+            return false;
           }
         }
 
         for (const target of capturePlan.positions) {
           if (requireMachineRunning && !machineRunning) {
             appendTerminalLine(`[${logPrefix} PLAN] stopped before capture sequence completed.`);
-            return;
+            return false;
           }
 
           if (capturePlan.requiresAxisTravel) {
@@ -53,7 +53,7 @@
           if (!blob) {
             appendTerminalLine(`[ERROR] Capture failed at image ${target.imageNumber}.`);
             setMachineStatus("ERROR", "error");
-            return;
+            return false;
           }
 
           const imageName = capturePlan.imagesPerBoard <= 1
@@ -90,6 +90,8 @@
         } else {
           setMachineStatus("BOARD CAPTURED", "running");
         }
+
+        return true;
       }
 
       async function testCapturePositions() {
