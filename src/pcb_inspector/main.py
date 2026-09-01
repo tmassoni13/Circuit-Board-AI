@@ -195,9 +195,9 @@ def close_kiosk_browser() -> None:
     closed here.
     """
     browser_patterns = [
-        "chromium-browser.*user_interface.html",
-        "chromium.*user_interface.html",
-        "google-chrome.*user_interface.html",
+        "chromium-browser.*user_interface",
+        "chromium.*user_interface",
+        "google-chrome.*user_interface",
     ]
     for pattern in browser_patterns:
         try:
@@ -469,7 +469,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
     class InspectorUiHandler(SimpleHTTPRequestHandler):
         def end_headers(self):
             # The Jetson kiosk browser can otherwise keep showing an older
-            # `user_interface.html` after a GitHub update. These headers force
+            # `user_interface/` files after a GitHub update. These headers force
             # Chromium to ask the local UI server for the current file each
             # time the page is opened or refreshed.
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -546,7 +546,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
             self.wfile.write(body)
 
     server = ThreadedHTTPServer((host, port), InspectorUiHandler)
-    print(f"ui=http://{host}:{port}/user_interface.html")
+    print(f"ui=http://{host}:{port}/user_interface/")
     print("Press Ctrl+C to stop the UI server.")
     server.serve_forever()
 

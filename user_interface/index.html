@@ -1,0 +1,217 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PCB Inline Inspector</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <section class="brand">
+          <h1>PCB Inline Inspector</h1>
+          <p class="subtitle">Conveyor AOI station</p>
+        </section>
+
+        <section class="status">
+          <div class="status-label">Machine Status</div>
+          <div class="status-value">OFF</div>
+        </section>
+
+        <section class="controls">
+          <button id="machine-toggle" class="start wide" type="button" onclick="toggleMachine()">Start</button>
+          <button id="startup-retry" class="retry hidden" type="button" onclick="retryStartup()">Retry</button>
+          <button id="startup-stop" class="stop hidden" type="button" onclick="resetMachine()">Stop</button>
+        </section>
+
+        <section class="counts">
+          <div class="count">
+            <div class="count-label">Passed</div>
+            <div class="count-value" id="passed-count">0</div>
+          </div>
+          <div class="count">
+            <div class="count-label">Failed</div>
+            <div class="count-value" id="failed-count">0</div>
+          </div>
+        </section>
+
+        <section class="controls">
+          <button class="wide" type="button" onclick="openSettings()">Settings</button>
+        </section>
+
+        <section class="controls">
+          <button class="wide" type="button" onclick="openImageLog()">Image Log</button>
+        </section>
+
+        <section class="panel">
+          <pre id="terminal-log" class="log-view active">[RESULT] PASS    No fatal defects    components=0    fatal_defects=0    runs/board_001_review.png
+[RESULT] PASS    No fatal defects    components=0    fatal_defects=0    runs/board_002_review.png</pre>
+        </section>
+      </aside>
+
+      <section class="camera-area">
+        <div class="topbar">
+          <div class="topbar-left">
+            <div class="topbar-title">Camera Feed</div>
+            <div class="topbar-specs" id="board-fov-summary">
+              <span>BOARD: 100 x 100 mm</span>
+              <span>FOV: 150 x 150 mm</span>
+              <span>IPB: 1</span>
+              <span>FOLDER: Manual Captures</span>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <button class="capture-button" type="button" onclick="captureStillImage()">Manual Capture</button>
+            <div class="topbar-meta" id="camera-meta">ELP USB Camera | Test Mode</div>
+          </div>
+        </div>
+        <div class="feed">
+          <div class="feed-frame" oncontextmenu="sampleBoardColorFromClick(event)">
+            <video id="webcam-preview" class="webcam-preview" autoplay muted playsinline></video>
+            <canvas id="board-overlay" class="board-overlay"></canvas>
+            <div id="camera-message" class="camera-message">Opening camera</div>
+            <div id="settings-overlay" class="settings-overlay">
+              <section class="settings-dialog">
+                <div class="settings-header">
+                  <div>
+                    <div class="settings-heading">Settings</div>
+                    <p class="settings-note">Board size and camera field of view determine whether the 2D axis needs to move.</p>
+                  </div>
+                  <div class="settings-actions">
+                    <button class="settings-close" type="button" onclick="closeSettings()" aria-label="Close settings">X</button>
+                  </div>
+                </div>
+
+                <section class="settings">
+                  <div class="settings-column">
+                    <div class="settings-group">
+                      <div class="settings-section-title">Board</div>
+                      <div class="settings-grid">
+                        <div class="field">
+                          <label for="board-width-mm">Width mm</label>
+                          <input id="board-width-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
+                        <div class="field">
+                          <label for="board-height-mm">Height mm</label>
+                          <input id="board-height-mm" type="number" min="10" max="500" step="1" value="100" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
+                        <div class="field color-swatch">
+                          <label for="board-background-color">Color</label>
+                          <input id="board-background-color" type="color" value="#002d04" oninput="autoApplySettings()">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="settings-group">
+                      <div class="settings-section-title">Camera FOV</div>
+                      <div class="settings-grid">
+                        <div class="field">
+                          <label for="camera-fov-width-mm">Width mm</label>
+                          <input id="camera-fov-width-mm" type="number" min="10" max="500" step="1" value="180" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
+                        <div class="field">
+                          <label for="camera-fov-height-mm">Height mm</label>
+                          <input id="camera-fov-height-mm" type="number" min="10" max="500" step="1" value="140" oninput="autoApplySettings()" onblur="autoApplySettings()">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="settings-group">
+                      <div class="settings-section-title">Auto Capture</div>
+                      <div class="settings-grid folder-settings-grid">
+                        <div class="field">
+                          <label for="auto-capture-folder">Current Folder</label>
+                          <select id="auto-capture-folder" onchange="autoApplySettings()"></select>
+                        </div>
+                        <div class="field">
+                          <label for="gemini-upload-quality">Gemini Upload</label>
+                          <select id="gemini-upload-quality" onchange="autoApplySettings()">
+                            <option value="full">Full</option>
+                            <option value="fast">Fast</option>
+                            <option value="ultra-fast">Ultra Fast</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div class="settings-column">
+                    <div class="settings-group">
+                      <div class="settings-section-title">Conveyor IO</div>
+                      <div class="relay-grid">
+                        <div class="relay-row">
+                          <div class="relay-label">Forward</div>
+                          <button id="relay-toggle-1" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(1)">Off</button>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Reverse</div>
+                          <button id="relay-toggle-2" class="relay-toggle relay-off" type="button" onclick="toggleConveyorRelay(2)">Off</button>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Start</div>
+                          <div id="sensor-status-1" class="sensor-status">Clear</div>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">Camera</div>
+                          <div id="sensor-status-2" class="sensor-status">Clear</div>
+                        </div>
+                        <div class="relay-row">
+                          <div class="relay-label">End</div>
+                          <div id="sensor-status-3" class="sensor-status">Clear</div>
+                        </div>
+                        <button id="sensor-transfer-toggle" class="relay-off" type="button" onclick="toggleSensorTransfer()">Move To Next Sensor</button>
+                        <button class="relay-off" type="button" onclick="allConveyorRelaysOff()">All Off</button>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <button class="settings-reset-corner" type="button" onclick="resetSettingsToDefaults()">Reset Defaults</button>
+              </section>
+            </div>
+            <div id="image-log-overlay" class="settings-overlay">
+              <section class="settings-dialog">
+                <div class="settings-header">
+                  <div>
+                    <div class="settings-heading">Image Log</div>
+                    <p class="settings-note">Captured images are numbered by board and image position.</p>
+                  </div>
+                  <div class="settings-actions">
+                    <button id="folder-prompt-toggle" class="path-button folder-context-button hidden" type="button" onclick="toggleActiveFolderPromptEditor()">Add Gemini Context</button>
+                    <button class="settings-close" type="button" onclick="closeImageLog()" aria-label="Close image log">X</button>
+                  </div>
+                </div>
+                <div id="image-log-path" class="image-log-path">
+                  <button class="path-button" type="button" onclick="showImageFolderRoot()">Back</button>
+                  <span id="image-log-path-label">Image Log</span>
+                </div>
+                <div id="image-folder-grid" class="image-folder-grid"></div>
+                <div id="image-log-grid" class="image-log-grid"></div>
+                <div id="image-preview" class="image-preview">
+                  <div class="image-preview-header">
+                    <div id="image-preview-title" class="image-preview-title">Image</div>
+                    <button class="settings-close" type="button" onclick="closeImagePreview()" aria-label="Close image preview">X</button>
+                  </div>
+                  <img id="image-preview-img" alt="Captured board preview">
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="js/config.js"></script>
+    <script src="js/machine_controls.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/image_log.js"></script>
+    <script src="js/hardware.js"></script>
+    <script src="js/capture_gemini.js"></script>
+    <script src="js/inspection_results.js"></script>
+    <script src="js/capture_sequence.js"></script>
+    <script src="js/auto_conveyor.js"></script>
+    <script src="js/board_vision.js"></script>
+    <script src="js/boot.js"></script>
+  </body>
+</html>
+
