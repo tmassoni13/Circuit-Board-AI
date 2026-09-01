@@ -141,17 +141,7 @@
 
                     <div class="settings-group">
                       <div class="settings-section-title">Manual 2D Axis</div>
-                      <div class="axis-jog-grid">
-                        <button class="axis-jog spacer" type="button" tabindex="-1" aria-hidden="true"></button>
-                        <button class="axis-jog axis-jog-up" type="button" onclick="jogAxis(0, -10)">+10mm</button>
-                        <button class="axis-jog spacer" type="button" tabindex="-1" aria-hidden="true"></button>
-                        <button class="axis-jog axis-jog-left" type="button" onclick="jogAxis(-10, 0)">+10mm</button>
-                        <button class="axis-jog home" type="button" onclick="moveAxisHome()">0,0</button>
-                        <button class="axis-jog axis-jog-right" type="button" onclick="jogAxis(10, 0)">+10mm</button>
-                        <button class="axis-jog spacer" type="button" tabindex="-1" aria-hidden="true"></button>
-                        <button class="axis-jog axis-jog-down" type="button" onclick="jogAxis(0, 10)">+10mm</button>
-                        <button class="axis-jog spacer" type="button" tabindex="-1" aria-hidden="true"></button>
-                      </div>
+                      <button class="manual-axis-open-button" type="button" onclick="openManualAxis()">Open Manual 2D Axis</button>
                     </div>
 
                   </div>
@@ -213,6 +203,32 @@
                     <button class="settings-close" type="button" onclick="closeImagePreview()" aria-label="Close image preview">X</button>
                   </div>
                   <img id="image-preview-img" alt="Captured board preview">
+                </div>
+              </section>
+            </div>
+            <div id="manual-axis-overlay" class="settings-overlay">
+              <section class="settings-dialog manual-axis-dialog">
+                <div class="settings-header">
+                  <div>
+                    <div class="settings-heading">Manual 2D Axis</div>
+                    <p class="settings-note">Jog the camera axis in 10 mm steps for setup and troubleshooting.</p>
+                  </div>
+                  <div class="settings-actions">
+                    <button class="settings-close" type="button" onclick="closeManualAxis()" aria-label="Close manual axis">X</button>
+                  </div>
+                </div>
+                <div class="manual-axis-panel">
+                  <div class="axis-jog-grid axis-jog-grid-large">
+                    <button class="axis-jog axis-jog-large spacer" type="button" tabindex="-1" aria-hidden="true"></button>
+                    <button class="axis-jog axis-jog-large axis-jog-up" type="button" onclick="jogAxis(0, 10)">+10mm</button>
+                    <button class="axis-jog axis-jog-large spacer" type="button" tabindex="-1" aria-hidden="true"></button>
+                    <button class="axis-jog axis-jog-large axis-jog-left" type="button" onclick="jogAxis(10, 0)">+10mm</button>
+                    <button class="axis-jog axis-jog-large home" type="button" onclick="moveAxisHome()">0,0</button>
+                    <button class="axis-jog axis-jog-large axis-jog-right" type="button" onclick="jogAxis(-10, 0)">+10mm</button>
+                    <button class="axis-jog axis-jog-large spacer" type="button" tabindex="-1" aria-hidden="true"></button>
+                    <button class="axis-jog axis-jog-large axis-jog-down" type="button" onclick="jogAxis(0, -10)">+10mm</button>
+                    <button class="axis-jog axis-jog-large spacer" type="button" tabindex="-1" aria-hidden="true"></button>
+                  </div>
                 </div>
               </section>
             </div>

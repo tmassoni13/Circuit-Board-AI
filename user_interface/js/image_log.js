@@ -1,5 +1,6 @@
 ﻿function openSettings() {
         closeImageLog();
+        closeManualAxis();
         document.getElementById("settings-overlay").classList.add("active");
         refreshConveyorIoStatus(false);
         startConveyorIoPolling();
@@ -26,6 +27,7 @@
 
       function openImageLog() {
         closeSettings();
+        closeManualAxis();
         imageLogView = "folders";
         activeFolderPromptEditorName = null;
         renderImageLogView();
@@ -43,6 +45,19 @@
       function closeImageLog() {
         activeFolderPromptEditorName = null;
         document.getElementById("image-log-overlay").classList.remove("active");
+      }
+
+      function openManualAxis() {
+        closeSettings();
+        closeImageLog();
+        document.getElementById("manual-axis-overlay").classList.add("active");
+      }
+
+      function closeManualAxis() {
+        const overlay = document.getElementById("manual-axis-overlay");
+        if (overlay) {
+          overlay.classList.remove("active");
+        }
       }
 
       function showImageFolderRoot() {
