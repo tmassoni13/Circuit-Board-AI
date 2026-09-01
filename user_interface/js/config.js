@@ -15,6 +15,8 @@
       const CAPTURE_CORNER_MAX_STEP_MM = 30;
       const CAPTURE_CORNER_MM_PER_OFFSET = 160;
       const CAPTURE_CORNER_SETTLE_MS = 500;
+      const CAPTURE_CORNER_EDGE_WAIT_FRAMES = 20;
+      const CAPTURE_CORNER_EDGE_WAIT_MS = 100;
       const CAPTURE_BOTTOM_SIGN_Y = 1;
       const AXIS_AUTO_ALIGN_ENABLED = true;
       const AXIS_BRIDGE_URL = "http://127.0.0.1:8765";
@@ -94,6 +96,7 @@
       const CAMERA_DEVICE_STORAGE_KEY = "pcbInspectorCameraDeviceId";
       const CAMERA_READY_TIMEOUT_MS = 2500;
       const AUTO_CONVEYOR_POLL_INTERVAL_MS = 200;
+      const CAMERA_SENSOR_SETTLE_MS = 1000;
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -163,4 +166,5 @@
       let autoConveyorBusy = false;
       let autoConveyorMoveDirection = "stopped";
       let ignoreEndSensorUntilNextBoard = false;
+      let lastCaptureFailureReason = "";
 

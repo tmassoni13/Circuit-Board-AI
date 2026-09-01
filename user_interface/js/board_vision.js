@@ -16,7 +16,7 @@
         };
       }
 
-      function findGreenBoard(video) {
+      function findBoardBySelectedColor(video) {
         // This commissioning detector looks for the configured PCB substrate
         // color anywhere in the camera frame. The result is only a board
         // presence signal, not a defect inspection or component detector.

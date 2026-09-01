@@ -80,7 +80,10 @@
           if (cameraDetected) {
             ignoreEndSensorUntilNextBoard = false;
             await stopAutoConveyorMotion();
-            appendTerminalLine("[BOARD] board detected at camera sensor. Starting image capture.");
+            appendTerminalLine("[BOARD] board detected at camera sensor. Waiting for board to settle.");
+            if (!await waitForBoardAtCameraSettle()) {
+              return;
+            }
             await beginBoardWorkflow(null);
             return;
           }
@@ -107,7 +110,10 @@
         if (autoConveyorState === "moving_to_camera") {
           if (cameraDetected) {
             await stopAutoConveyorMotion();
-            appendTerminalLine("[BOARD] board reached camera sensor. Conveyor stopped for imaging.");
+            appendTerminalLine("[BOARD] board reached camera sensor. Waiting for board to settle.");
+            if (!await waitForBoardAtCameraSettle()) {
+              return;
+            }
             await beginBoardWorkflow(null);
           }
           return;
@@ -148,6 +154,17 @@
       async function stopAutoConveyorMotion() {
         autoConveyorMoveDirection = "stopped";
         await allConveyorRelaysOff({ keepSensorTransferState: true, writeLog: false });
+      }
+
+      async function waitForBoardAtCameraSettle() {
+        setMachineStatus("BOARD SETTLING", "searching");
+        await wait(CAMERA_SENSOR_SETTLE_MS);
+        if (!machineRunning) {
+          lastCaptureFailureReason = "machine was stopped during board settle";
+          return false;
+        }
+
+        return true;
       }
 
       async function beginBoardWorkflow(board) {
@@ -198,7 +215,7 @@
         autoConveyorState = "capture_error";
         autoConveyorMoveDirection = "stopped";
         waitingForNextBoard = false;
-        appendTerminalLine("[BOARD] Imaging did not complete. Board held at camera sensor.");
+        appendTerminalLine(`[BOARD] Imaging did not complete. Board held at camera sensor. Reason: ${lastCaptureFailureReason || "unknown capture failure"}.`);
         setMachineStatus("CAPTURE ERROR", "error");
         await stopAutoConveyorMotion();
       }

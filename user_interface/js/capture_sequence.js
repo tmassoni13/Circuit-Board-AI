@@ -1,4 +1,5 @@
-﻿async function captureBoardImageSet(options = {}) {
+async function captureBoardImageSet(options = {}) {
+        lastCaptureFailureReason = "";
         const requireMachineRunning = options.requireMachineRunning !== false;
         const logPrefix = options.logPrefix || "CAPTURE";
         const alignFromCamera = options.alignFromCamera === true;
@@ -10,7 +11,8 @@
           : initialCapturePlan;
 
         if (!axisBridgeConnected && capturePlan.requiresAxisTravel) {
-          appendTerminalLine("[ERROR] Cannot run multi-image board capture. 2D axis is not connected.");
+          lastCaptureFailureReason = "2D axis is not connected for multi-image capture";
+          appendTerminalLine(`[ERROR] Cannot run multi-image board capture. ${lastCaptureFailureReason}.`);
           return false;
         }
 
@@ -25,6 +27,7 @@
         if (alignFromCamera && capturePlan.requiresAxisTravel) {
           const alignedOrigin = await alignCameraToVisibleBoardCorner(logPrefix);
           if (!alignedOrigin) {
+            lastCaptureFailureReason = "board corner alignment failed";
             setMachineStatus("CORNER ALIGN FAILED", "error");
             return false;
           }
@@ -32,7 +35,8 @@
 
         for (const target of capturePlan.positions) {
           if (requireMachineRunning && !machineRunning) {
-            appendTerminalLine(`[${logPrefix} PLAN] stopped before capture sequence completed.`);
+            lastCaptureFailureReason = "machine was stopped before capture sequence completed";
+            appendTerminalLine(`[${logPrefix} PLAN] ${lastCaptureFailureReason}.`);
             return false;
           }
 
@@ -51,7 +55,8 @@
 
           const blob = await captureStillBlob();
           if (!blob) {
-            appendTerminalLine(`[ERROR] Capture failed at image ${target.imageNumber}.`);
+            lastCaptureFailureReason = `camera capture failed at image ${target.imageNumber}`;
+            appendTerminalLine(`[ERROR] ${lastCaptureFailureReason}.`);
             setMachineStatus("ERROR", "error");
             return false;
           }
@@ -158,14 +163,28 @@
 
         let bottomAlignSign = CAPTURE_BOTTOM_SIGN_Y;
         let previousAbsOffset = null;
+        let missingEdgeFrames = 0;
 
-        for (let step = 1; step <= CAPTURE_CORNER_ALIGN_MAX_STEPS; step += 1) {
-          const board = findGreenBoard(video);
+        for (let step = 1; step <= CAPTURE_CORNER_ALIGN_MAX_STEPS;) {
+          const board = findBoardBySelectedColor(video);
           if (!board) {
-            appendTerminalLine(`[${logPrefix}] cannot align corner. No board edge is visible.`);
-            return null;
+            missingEdgeFrames += 1;
+            if (missingEdgeFrames === 1 || missingEdgeFrames % 5 === 0) {
+              appendTerminalLine(
+                `[${logPrefix}] waiting for visible board edge ${missingEdgeFrames}/${CAPTURE_CORNER_EDGE_WAIT_FRAMES}.`
+              );
+            }
+
+            if (missingEdgeFrames >= CAPTURE_CORNER_EDGE_WAIT_FRAMES) {
+              appendTerminalLine(`[${logPrefix}] cannot align corner. No board edge is visible.`);
+              return null;
+            }
+
+            await wait(CAPTURE_CORNER_EDGE_WAIT_MS);
+            continue;
           }
 
+          missingEdgeFrames = 0;
           const yOffset = visibleBoardBottomOffset(board, video);
           const absOffset = Math.abs(yOffset);
 
@@ -198,6 +217,7 @@
           });
           await wait(CAPTURE_CORNER_SETTLE_MS);
           previousAbsOffset = absOffset;
+          step += 1;
         }
 
         appendTerminalLine(`[${logPrefix}] bottom alignment failed. Board bottom never reached target.`);

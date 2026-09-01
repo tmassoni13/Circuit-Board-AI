@@ -145,10 +145,12 @@
       function updateInspectionCounters() {
         let passedImages = 0;
         let failedImages = 0;
+        const processedBoards = new Set();
         const folder = getImageFolder(autoCaptureFolderName);
 
         if (folder.name !== FAILURE_IMAGE_FOLDER_NAME) {
           for (const entry of folder.entries) {
+            processedBoards.add(boardNumberFromImageName(entry.name));
             if (entry.inspectionStatus === "pass") {
               passedImages += 1;
             } else if (entry.inspectionStatus === "fail") {
@@ -157,7 +159,11 @@
           }
         }
 
+        document.getElementById("board-count").textContent = String(processedBoards.size);
         document.getElementById("passed-count").textContent = String(passedImages);
         document.getElementById("failed-count").textContent = String(failedImages);
       }
 
+      function boardNumberFromImageName(imageName) {
+        return String(imageName).split(".")[0];
+      }
