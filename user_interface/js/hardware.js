@@ -455,6 +455,35 @@
         }
       }
 
+      async function allConveyorRelaysOffFast() {
+        const previousStates = { ...relayStates };
+        for (const channel of CONVEYOR_RELAY_CHANNELS) {
+          relayRequestIds[channel] += 1;
+          relayPendingStates[channel] = false;
+          setRelayButtonVisual(channel, false, true);
+        }
+
+        try {
+          const response = await fetchWithTimeout("/api/conveyor-relay-all-off-fast", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: "{}"
+          }, CONVEYOR_IO_REQUEST_TIMEOUT_MS);
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || `HTTP ${response.status}`);
+          }
+
+          relayPendingStates = {};
+          updateConveyorRelayButtons(payload.states || {}, { force: true });
+        } catch (error) {
+          relayPendingStates = {};
+          updateConveyorRelayButtons(previousStates, { force: true });
+          appendTerminalLine(`[CONVEYOR ERROR] fast stop failed: ${error.message}`);
+          await allConveyorRelaysOff({ keepSensorTransferState: true, writeLog: false });
+        }
+      }
+
       async function stopExistingPreview(video) {
         // Explicitly stop old tracks before reconnecting so Chromium does not
         // keep the USB inspection camera locked after a UI refresh.
@@ -470,7 +499,11 @@
 
       async function connectAxis() {
         try {
-          const response = await fetch(`${AXIS_BRIDGE_URL}/axis/status`);
+          const response = await fetchWithTimeout(
+            `${AXIS_BRIDGE_URL}/axis/status`,
+            {},
+            AXIS_BRIDGE_REQUEST_TIMEOUT_MS
+          );
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
@@ -490,10 +523,6 @@
       }
 
       async function ensureAxisConnectedForStart() {
-        if (axisBridgeConnected) {
-          return true;
-        }
-
         await connectAxis();
         return axisBridgeConnected;
       }

@@ -96,7 +96,8 @@
       const MAX_TERMINAL_LINES = 260;
       const CAMERA_DEVICE_STORAGE_KEY = "pcbInspectorCameraDeviceId";
       const CAMERA_READY_TIMEOUT_MS = 2500;
-      const AUTO_CONVEYOR_POLL_INTERVAL_MS = 200;
+      const AXIS_BRIDGE_REQUEST_TIMEOUT_MS = 2500;
+      const AUTO_CONVEYOR_POLL_INTERVAL_MS = 75;
       const CAMERA_SENSOR_SETTLE_MS = 1000;
 
       let autoScanTimer = null;

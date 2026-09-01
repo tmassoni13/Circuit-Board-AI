@@ -80,7 +80,7 @@
         if (autoConveyorState === "searching") {
           if (cameraDetected) {
             ignoreEndSensorUntilNextBoard = false;
-            await stopAutoConveyorMotion();
+            await stopAutoConveyorMotion(true);
             appendTerminalLine("[BOARD] board detected at camera sensor. Waiting for board to settle.");
             if (!await waitForBoardAtCameraSettle()) {
               return;
@@ -110,7 +110,7 @@
 
         if (autoConveyorState === "moving_to_camera") {
           if (cameraDetected) {
-            await stopAutoConveyorMotion();
+            await stopAutoConveyorMotion(true);
             appendTerminalLine("[BOARD] board reached camera sensor. Waiting for board to settle.");
             if (!await waitForBoardAtCameraSettle()) {
               return;
@@ -152,8 +152,13 @@
         await setConveyorRelay(direction === "forward" ? 1 : 2, true);
       }
 
-      async function stopAutoConveyorMotion() {
+      async function stopAutoConveyorMotion(fast = false) {
         autoConveyorMoveDirection = "stopped";
+        if (fast) {
+          await allConveyorRelaysOffFast();
+          return;
+        }
+
         await allConveyorRelaysOff({ keepSensorTransferState: true, writeLog: false });
       }
 

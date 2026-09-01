@@ -139,6 +139,24 @@ class ConveyorIoController:
                 self._set_channel_unlocked(channel, False)
             return self.status()
 
+    def all_off_fast(self):
+        """Turn off conveyor outputs without reading sensors afterward.
+
+        This is used for time-critical conveyor stops. The normal `all_off`
+        method also reads every sensor before returning its JSON payload, which
+        is useful for the UI but unnecessary when the first priority is cutting
+        motion as soon as the camera sensor trips.
+        """
+        with self._lock:
+            self._ensure_initialized()
+            for channel in CONVEYOR_RELAY_OUTPUT_PINS:
+                self._set_channel_unlocked(channel, False)
+            return {
+                "relay_pins": CONVEYOR_RELAY_OUTPUT_PINS,
+                "states": self._relay_states,
+                "initialized": self._initialized,
+            }
+
     def set_sensor_active_low(self, active_low):
         with self._lock:
             self.sensor_active_low = bool(active_low)
@@ -483,6 +501,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                 "/api/analyze-board",
                 "/api/conveyor-relay",
                 "/api/conveyor-relay-all-off",
+                "/api/conveyor-relay-all-off-fast",
                 "/api/conveyor-sensor-logic",
                 "/api/close-app",
             }:
@@ -512,6 +531,10 @@ def serve_ui(host: str, port: int, root: Path) -> None:
 
                 if endpoint == "/api/conveyor-relay-all-off":
                     self.send_json(200, CONVEYOR_IO.all_off())
+                    return
+
+                if endpoint == "/api/conveyor-relay-all-off-fast":
+                    self.send_json(200, CONVEYOR_IO.all_off_fast())
                     return
 
                 if endpoint == "/api/conveyor-sensor-logic":
