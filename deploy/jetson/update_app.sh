@@ -102,10 +102,10 @@ ENV
 fi
 
 echo "[UPDATE] Checking UI markers..."
-if grep -n "image-analyze" "${PROJECT_ROOT}/user_interface.html" >/dev/null 2>&1; then
-  grep -n "image-analyze" "${PROJECT_ROOT}/user_interface.html" | head -n 2
+if grep -n "image-analyze" "${PROJECT_ROOT}/user_interface/js/image_log.js" >/dev/null 2>&1; then
+  grep -n "image-analyze" "${PROJECT_ROOT}/user_interface/js/image_log.js" | head -n 2
 else
-  echo "[WARNING] The Gemini image-log button marker was not found in user_interface.html."
+  echo "[WARNING] The Gemini image-log button marker was not found in user_interface/js/image_log.js."
   echo "[WARNING] If you expected it, make sure the Windows computer committed and pushed the change."
 fi
 
