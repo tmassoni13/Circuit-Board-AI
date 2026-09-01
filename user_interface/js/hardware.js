@@ -536,10 +536,19 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body)
         });
+        const payload = await response.json();
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+          throw new Error(payload.error || `HTTP ${response.status}`);
         }
-        return response.json();
+
+        const lines = payload.lines || payload.responses || [];
+        const flatLines = Array.isArray(lines) ? lines.flat(Infinity).map((line) => String(line)) : [];
+        const controllerError = flatLines.find((line) => line.startsWith("error") || line.startsWith("ALARM"));
+        if (controllerError) {
+          throw new Error(controllerError);
+        }
+
+        return payload;
       }
 
       async function testAxisMove() {

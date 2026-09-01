@@ -154,7 +154,16 @@ class AxisBridge:
         # Small G1 segments at a steady feed rate are smoother for camera
         # centering while we are still using HTTP commands instead of GRBL's
         # realtime jog mode.
-        return self.send(f"G1 X{x_mm:.3f} Y{y_mm:.3f} F{feed:.1f}")
+        #
+        # The UI must not make the next camera-alignment decision until the
+        # current correction has physically finished. GRBL returns "ok" when a
+        # command is accepted into the planner, not when motion is complete, so
+        # wait for Idle before returning to the browser.
+        lines = []
+        lines.extend(self.send("G91"))
+        lines.extend(self.send(f"G1 X{x_mm:.3f} Y{y_mm:.3f} F{feed:.1f}"))
+        lines.append(self.wait_until_idle())
+        return lines
 
     def move_absolute(self, x_mm: float, y_mm: float, feed_mm_min: Optional[float] = None) -> List[str]:
         feed = feed_mm_min or self.config.feed_mm_min
