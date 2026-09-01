@@ -289,6 +289,11 @@
         user-select: none;
       }
 
+      button.pending {
+        opacity: 0.72;
+        filter: saturate(0.75);
+      }
+
       .start {
         background: #0b6b57;
         border-color: #15a17f;
@@ -1373,6 +1378,11 @@
         2: "Camera",
         3: "End"
       };
+      const CONVEYOR_IO_POLL_INTERVAL_MS = 500;
+      const CONVEYOR_IO_REQUEST_TIMEOUT_MS = 3000;
+      const MAX_TERMINAL_LINES = 260;
+      const CAMERA_DEVICE_STORAGE_KEY = "pcbInspectorCameraDeviceId";
+      const CAMERA_READY_TIMEOUT_MS = 2500;
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -1425,11 +1435,19 @@
         2: false
       };
       let conveyorIoPollTimer = null;
+      let conveyorIoPollBusy = false;
       let sensorTransferTimer = null;
       let sensorTransferEnabled = false;
       let sensorTransferDirection = "stopped";
       let sensorTransferTarget = null;
       let sensorTransferBusy = false;
+      let terminalLines = null;
+      let relayRequestIds = {
+        1: 0,
+        2: 0
+      };
+      let relayPendingStates = {};
+      let conveyorIoWarningCache = new Set();
 
       function setMachineStatus(value, state = "idle") {
         const status = document.querySelector(".status");
@@ -1792,7 +1810,7 @@
         stopConveyorIoPolling();
         conveyorIoPollTimer = window.setInterval(() => {
           refreshConveyorIoStatus(false);
-        }, 250);
+        }, CONVEYOR_IO_POLL_INTERVAL_MS);
       }
 
       function stopConveyorIoPolling() {
@@ -2402,22 +2420,42 @@
 
       function appendTerminalLine(line) {
         const terminal = document.getElementById("terminal-log");
-        terminal.textContent = `${terminal.textContent.trimEnd()}\n${line}`;
+        if (!terminalLines) {
+          terminalLines = terminal.textContent.trim().split("\n").filter(Boolean);
+        }
+
+        terminalLines.push(line);
+        if (terminalLines.length > MAX_TERMINAL_LINES) {
+          terminalLines = terminalLines.slice(terminalLines.length - MAX_TERMINAL_LINES);
+        }
+
+        terminal.textContent = terminalLines.join("\n");
         terminal.scrollTop = terminal.scrollHeight;
       }
 
-      function updateConveyorRelayButtons(states = relayStates) {
+      function setRelayButtonVisual(channel, isOn, pending = false) {
+        const button = document.getElementById(`relay-toggle-${channel}`);
+        if (!button) {
+          return;
+        }
+
+        relayStates[channel] = Boolean(isOn);
+        button.textContent = isOn ? "On" : "Off";
+        button.classList.toggle("relay-on", isOn);
+        button.classList.toggle("relay-off", !isOn);
+        button.classList.toggle("pending", pending);
+        button.setAttribute("aria-busy", pending ? "true" : "false");
+      }
+
+      function updateConveyorRelayButtons(states = relayStates, options = {}) {
+        const force = Boolean(options.force);
         for (const channel of CONVEYOR_RELAY_CHANNELS) {
-          const button = document.getElementById(`relay-toggle-${channel}`);
-          if (!button) {
+          if (!force && Object.prototype.hasOwnProperty.call(relayPendingStates, channel)) {
             continue;
           }
 
           const isOn = Boolean(states[channel] || states[String(channel)]);
-          relayStates[channel] = isOn;
-          button.textContent = isOn ? "On" : "Off";
-          button.classList.toggle("relay-on", isOn);
-          button.classList.toggle("relay-off", !isOn);
+          setRelayButtonVisual(channel, isOn, false);
         }
       }
 
@@ -2444,13 +2482,21 @@
         updateConveyorSensorIndicators(payload.sensors || {}, payload.sensor_raw_levels || {});
         if (payload.sensor_errors) {
           for (const [sensor, message] of Object.entries(payload.sensor_errors)) {
-            appendTerminalLine(`[CONVEYOR WARNING] ${CONVEYOR_SENSOR_NAMES[sensor] || `Sensor ${sensor}`}: ${message}`);
+            const warningKey = `${sensor}:${message}`;
+            if (!conveyorIoWarningCache.has(warningKey)) {
+              conveyorIoWarningCache.add(warningKey);
+              appendTerminalLine(`[CONVEYOR WARNING] ${CONVEYOR_SENSOR_NAMES[sensor] || `Sensor ${sensor}`}: ${message}`);
+            }
           }
         }
       }
 
       async function toggleConveyorRelay(channel) {
-        await setConveyorRelay(channel, !relayStates[channel]);
+        const pendingState = relayPendingStates[channel];
+        const currentState = Object.prototype.hasOwnProperty.call(relayPendingStates, channel)
+          ? pendingState
+          : relayStates[channel];
+        await setConveyorRelay(channel, !currentState);
       }
 
       function updateSensorTransferButton() {
@@ -2523,7 +2569,11 @@
 
       async function readConveyorIoStatusForTransfer() {
         try {
-          const response = await fetch("/api/conveyor-relay-status");
+          const response = await fetchWithTimeout(
+            "/api/conveyor-relay-status",
+            {},
+            CONVEYOR_IO_REQUEST_TIMEOUT_MS
+          );
           const payload = await response.json();
           if (!response.ok) {
             throw new Error(payload.error || `HTTP ${response.status}`);
@@ -2570,8 +2620,17 @@
       }
 
       async function refreshConveyorIoStatus(writeLog = true) {
+        if (conveyorIoPollBusy) {
+          return;
+        }
+
+        conveyorIoPollBusy = true;
         try {
-          const response = await fetch("/api/conveyor-relay-status");
+          const response = await fetchWithTimeout(
+            "/api/conveyor-relay-status",
+            {},
+            CONVEYOR_IO_REQUEST_TIMEOUT_MS
+          );
           const payload = await response.json();
           if (!response.ok) {
             throw new Error(payload.error || `HTTP ${response.status}`);
@@ -2588,23 +2647,46 @@
           if (writeLog) {
             appendTerminalLine(`[CONVEYOR ERROR] status failed: ${error.message}`);
           }
+        } finally {
+          conveyorIoPollBusy = false;
         }
       }
 
       async function setConveyorRelay(channel, state) {
+        const requestId = relayRequestIds[channel] + 1;
+        relayRequestIds[channel] = requestId;
+        const previousStates = { ...relayStates };
+        relayPendingStates[channel] = Boolean(state);
+        if (state && channel === 1) {
+          relayRequestIds[2] += 1;
+          relayPendingStates[2] = false;
+          setRelayButtonVisual(2, false, true);
+        }
+        if (state && channel === 2) {
+          relayRequestIds[1] += 1;
+          relayPendingStates[1] = false;
+          setRelayButtonVisual(1, false, true);
+        }
+        setRelayButtonVisual(channel, state, true);
+
         try {
-          const previousStates = { ...relayStates };
-          const response = await fetch("/api/conveyor-relay", {
+          const response = await fetchWithTimeout("/api/conveyor-relay", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ channel, state })
-          });
+          }, CONVEYOR_IO_REQUEST_TIMEOUT_MS);
           const payload = await response.json();
           if (!response.ok) {
             throw new Error(payload.error || `HTTP ${response.status}`);
           }
 
-          updateConveyorIoStatus(payload);
+          if (relayRequestIds[channel] !== requestId) {
+            return;
+          }
+
+          relayPendingStates = {};
+          updateConveyorRelayButtons(payload.states || {}, { force: true });
+          updateConveyorSensorIndicators(payload.sensors || {}, payload.sensor_raw_levels || {});
           appendTerminalLine(`[CONVEYOR] ${channel === 1 ? "Forward" : "Reverse"} pin ${payload.relay_pins[channel]} ${state ? "ON" : "OFF"}.`);
           if (state && channel === 1 && previousStates[2] && !relayStates[2]) {
             appendTerminalLine("[SAFETY] Reverse relay forced OFF before Forward relay turned ON.");
@@ -2613,6 +2695,16 @@
             appendTerminalLine("[SAFETY] Forward relay forced OFF before Reverse relay turned ON.");
           }
         } catch (error) {
+          if (relayRequestIds[channel] === requestId) {
+            delete relayPendingStates[channel];
+            if (channel === 1) {
+              delete relayPendingStates[2];
+            }
+            if (channel === 2) {
+              delete relayPendingStates[1];
+            }
+            updateConveyorRelayButtons(previousStates, { force: true });
+          }
           appendTerminalLine(`[CONVEYOR ERROR] CH${channel}: ${error.message}`);
         }
       }
@@ -2631,22 +2723,33 @@
           updateSensorTransferButton();
         }
 
+        const previousStates = { ...relayStates };
+        for (const channel of CONVEYOR_RELAY_CHANNELS) {
+          relayRequestIds[channel] += 1;
+          relayPendingStates[channel] = false;
+          setRelayButtonVisual(channel, false, true);
+        }
+
         try {
-          const response = await fetch("/api/conveyor-relay-all-off", {
+          const response = await fetchWithTimeout("/api/conveyor-relay-all-off", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: "{}"
-          });
+          }, CONVEYOR_IO_REQUEST_TIMEOUT_MS);
           const payload = await response.json();
           if (!response.ok) {
             throw new Error(payload.error || `HTTP ${response.status}`);
           }
 
-          updateConveyorIoStatus(payload);
+          relayPendingStates = {};
+          updateConveyorRelayButtons(payload.states || {}, { force: true });
+          updateConveyorSensorIndicators(payload.sensors || {}, payload.sensor_raw_levels || {});
           if (writeLog) {
             appendTerminalLine("[CONVEYOR] All relay channels OFF.");
           }
         } catch (error) {
+          relayPendingStates = {};
+          updateConveyorRelayButtons(previousStates, { force: true });
           appendTerminalLine(`[CONVEYOR ERROR] all off failed: ${error.message}`);
         }
       }
@@ -2697,10 +2800,10 @@
       async function ensureCameraConnectedForStart() {
         if (!cameraConnected) {
           await openPreviewCamera();
-          await wait(300);
         }
 
         const video = document.getElementById("webcam-preview");
+        await waitForVideoReady(video, CAMERA_READY_TIMEOUT_MS);
         if (!video.srcObject || !video.videoWidth || !video.videoHeight) {
           cameraConnected = false;
           return false;
@@ -2805,8 +2908,7 @@
 
       function cameraLooksLikeElp(device) {
         // Browser device labels are only available after the page has camera
-        // permission. Only the inspection camera counts here. The laptop
-        // webcam must never satisfy the machine camera failsafe.
+        // permission. Prefer the inspection camera by its known names first.
         const label = device.label.toLowerCase();
         return (
           label.includes("elp") ||
@@ -2816,7 +2918,30 @@
         );
       }
 
-      async function getPreferredCameraDeviceId() {
+      function cameraLooksInternal(device) {
+        const label = device.label.toLowerCase();
+        return (
+          label.includes("integrated") ||
+          label.includes("built-in") ||
+          label.includes("facetime") ||
+          label.includes("laptop") ||
+          label.includes("webcam")
+        );
+      }
+
+      function cameraLooksExternalUsb(device) {
+        const label = device.label.toLowerCase();
+        return (
+          !cameraLooksInternal(device) &&
+          (
+            label.includes("usb") ||
+            label.includes("uvc") ||
+            label.includes("camera")
+          )
+        );
+      }
+
+      async function getVideoInputDevices() {
         // First ask for temporary access. Without this, Chrome/Edge hide camera
         // names and every device label comes back blank.
         const permissionStream = await navigator.mediaDevices.getUserMedia({
@@ -2829,12 +2954,76 @@
         }
 
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter((device) => device.kind === "videoinput");
+        return devices.filter((device) => device.kind === "videoinput");
+      }
 
-        // No fallback. If the ELP/48MP inspection camera is not present, the
-        // camera failsafe must fail instead of accepting the laptop webcam.
-        const inspectionCamera = videoDevices.find(cameraLooksLikeElp);
-        return inspectionCamera ? inspectionCamera.deviceId : null;
+      function getPreferredCameraDevices(videoDevices) {
+        const savedDeviceId = window.localStorage.getItem(CAMERA_DEVICE_STORAGE_KEY);
+        const orderedDevices = [];
+        const addDevice = (device) => {
+          if (device && !orderedDevices.some((candidate) => candidate.deviceId === device.deviceId)) {
+            orderedDevices.push(device);
+          }
+        };
+
+        addDevice(videoDevices.find((device) => device.deviceId === savedDeviceId));
+        addDevice(videoDevices.find(cameraLooksLikeElp));
+        videoDevices.filter(cameraLooksExternalUsb).forEach(addDevice);
+        if (videoDevices.length === 1 && !cameraLooksInternal(videoDevices[0])) {
+          addDevice(videoDevices[0]);
+        }
+
+        return orderedDevices;
+      }
+
+      async function openCameraStreamForDevice(device) {
+        const highResolutionConstraints = {
+          video: {
+            deviceId: { exact: device.deviceId },
+            width: { ideal: 8000 },
+            height: { ideal: 6000 },
+            frameRate: { ideal: 60 }
+          },
+          audio: false
+        };
+        const basicConstraints = {
+          video: {
+            deviceId: { exact: device.deviceId }
+          },
+          audio: false
+        };
+
+        try {
+          return await navigator.mediaDevices.getUserMedia(highResolutionConstraints);
+        } catch (error) {
+          appendTerminalLine(`[CAMERA] High resolution open failed for ${device.label || "camera"}: ${error.name || error.message}. Retrying basic mode.`);
+          return navigator.mediaDevices.getUserMedia(basicConstraints);
+        }
+      }
+
+      function waitForVideoReady(video, timeoutMs = CAMERA_READY_TIMEOUT_MS) {
+        if (video.videoWidth && video.videoHeight) {
+          return Promise.resolve(true);
+        }
+
+        return new Promise((resolve) => {
+          let settled = false;
+          const finish = (ready) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            video.removeEventListener("loadedmetadata", handleReady);
+            video.removeEventListener("canplay", handleReady);
+            window.clearTimeout(timeout);
+            resolve(ready);
+          };
+          const handleReady = () => finish(Boolean(video.videoWidth && video.videoHeight));
+          const timeout = window.setTimeout(() => finish(Boolean(video.videoWidth && video.videoHeight)), timeoutMs);
+
+          video.addEventListener("loadedmetadata", handleReady, { once: true });
+          video.addEventListener("canplay", handleReady, { once: true });
+        });
       }
 
       async function openPreviewCamera() {
@@ -2852,26 +3041,37 @@
 
         try {
           await stopExistingPreview(video);
-          const deviceId = await getPreferredCameraDeviceId();
-          if (!deviceId) {
+          const videoDevices = await getVideoInputDevices();
+          const preferredDevices = getPreferredCameraDevices(videoDevices);
+          if (!preferredDevices.length) {
             cameraConnected = false;
             message.textContent = "No USB camera found";
             message.style.display = "grid";
             meta.textContent = "Camera not connected";
+            appendTerminalLine("[CAMERA] No inspection camera candidate found.");
             return;
           }
 
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              deviceId: { exact: deviceId },
-              width: { ideal: 8000 },
-              height: { ideal: 6000 },
-              frameRate: { ideal: 60 },
-              facingMode: { ideal: "environment" }
-            },
-            audio: false
-          });
+          let stream = null;
+          let selectedDevice = null;
+          let lastError = null;
+          for (const device of preferredDevices) {
+            try {
+              stream = await openCameraStreamForDevice(device);
+              selectedDevice = device;
+              break;
+            } catch (error) {
+              lastError = error;
+              appendTerminalLine(`[CAMERA] Could not open ${device.label || "camera"}: ${error.name || error.message}.`);
+            }
+          }
+
+          if (!stream) {
+            throw lastError || new Error("No camera stream opened.");
+          }
+
           video.srcObject = stream;
+          await waitForVideoReady(video, CAMERA_READY_TIMEOUT_MS);
 
           const [track] = stream.getVideoTracks();
           track.addEventListener("ended", () => {
@@ -2898,13 +3098,18 @@
           const width = settings.width || "?";
           const height = settings.height || "?";
           meta.textContent = `${label} | ${width} x ${height}`;
+          if (selectedDevice && selectedDevice.deviceId) {
+            window.localStorage.setItem(CAMERA_DEVICE_STORAGE_KEY, selectedDevice.deviceId);
+          }
           cameraConnected = true;
           message.style.display = "none";
+          appendTerminalLine(`[CAMERA] Connected ${label} at ${width} x ${height}.`);
         } catch (error) {
           cameraConnected = false;
           message.textContent = "Camera blocked or unavailable. Allow camera access and close other camera apps.";
           message.style.display = "grid";
           meta.textContent = "Camera not connected";
+          appendTerminalLine(`[CAMERA ERROR] ${error.name || "Camera"}: ${error.message || error}`);
         }
       }
 
