@@ -190,10 +190,11 @@
             return;
           }
 
+          const alignmentMode = captureAlignmentModeForSettings(settings);
           appendTerminalLine(
-            `[BOARD] large board requires ${capturePlan.columns}x${capturePlan.rows} capture plan. Starting camera corner alignment.`
+            `[BOARD] large board requires ${capturePlan.columns}x${capturePlan.rows} capture plan. Starting ${alignmentMode} alignment.`
           );
-          setMachineStatus("ALIGNING CORNER", "searching");
+          setMachineStatus(`ALIGNING ${alignmentMode.toUpperCase()}`, "searching");
 
           const captureComplete = await captureBoardImageSet({
             requireMachineRunning: true,

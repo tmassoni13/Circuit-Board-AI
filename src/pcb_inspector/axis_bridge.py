@@ -1,5 +1,6 @@
 import threading
 import time
+import re
 from typing import List, Optional
 
 from flask import Flask, jsonify, request
@@ -165,6 +166,46 @@ class AxisBridge:
         lines.append(self.wait_until_idle())
         return lines
 
+    def verified_move_relative(
+        self,
+        x_mm: float,
+        y_mm: float,
+        feed_mm_min: Optional[float] = None,
+    ) -> dict:
+        """Move relative and include before/after positions for UI debugging.
+
+        GRBL can reply `ok` even when the machine does not physically move,
+        because `ok` only means the controller accepted the command. Returning
+        WPos before and after the command lets the browser detect a stalled,
+        disabled, locked, or wrongly connected axis instead of continuing
+        through the capture alignment sequence blindly.
+        """
+        before_status = self.status()
+        before_position = parse_wpos_from_status(before_status)
+        lines = self.move_relative(x_mm=x_mm, y_mm=y_mm, feed_mm_min=feed_mm_min)
+        after_status = self.status()
+        after_position = parse_wpos_from_status(after_status)
+        delta_x = None
+        delta_y = None
+        moved = True
+
+        if before_position is not None and after_position is not None:
+            delta_x = after_position[0] - before_position[0]
+            delta_y = after_position[1] - before_position[1]
+            requested_motion = abs(x_mm) > 0.05 or abs(y_mm) > 0.05
+            measured_motion = abs(delta_x) > 0.05 or abs(delta_y) > 0.05
+            moved = not requested_motion or measured_motion
+
+        return {
+            "lines": lines,
+            "before_status": before_status,
+            "after_status": after_status,
+            "before_position": before_position,
+            "after_position": after_position,
+            "delta": {"x_mm": delta_x, "y_mm": delta_y},
+            "moved": moved,
+        }
+
     def move_absolute(self, x_mm: float, y_mm: float, feed_mm_min: Optional[float] = None) -> List[str]:
         feed = feed_mm_min or self.config.feed_mm_min
         lines = []
@@ -223,6 +264,32 @@ class AxisBridge:
         return lines
 
 
+def parse_wpos_from_status(status: str) -> Optional[List[float]]:
+    """Return GRBL work coordinates from a status line.
+
+    The app uses work coordinates because Set Zero defines the inspection
+    origin with G54 work offsets. If GRBL only reports raw machine coordinates,
+    fall back to MPos so movement verification still works.
+    """
+    work_match = re.search(r"WPos:([-0-9.]+),([-0-9.]+),([-0-9.]+)", status)
+    if work_match:
+        return [float(work_match.group(1)), float(work_match.group(2)), float(work_match.group(3))]
+
+    machine_match = re.search(r"MPos:([-0-9.]+),([-0-9.]+),([-0-9.]+)", status)
+    offset_match = re.search(r"WCO:([-0-9.]+),([-0-9.]+),([-0-9.]+)", status)
+    if machine_match and offset_match:
+        return [
+            float(machine_match.group(1)) - float(offset_match.group(1)),
+            float(machine_match.group(2)) - float(offset_match.group(2)),
+            float(machine_match.group(3)) - float(offset_match.group(3)),
+        ]
+
+    if machine_match:
+        return [float(machine_match.group(1)), float(machine_match.group(2)), float(machine_match.group(3))]
+
+    return None
+
+
 def create_axis_bridge_app(config: AxisBridgeConfig) -> Flask:
     app = Flask(__name__)
     bridge = AxisBridge(config)
@@ -252,8 +319,19 @@ def create_axis_bridge_app(config: AxisBridgeConfig) -> Flask:
         x_mm = float(payload.get("x_mm", 0.0))
         y_mm = float(payload.get("y_mm", 0.0))
         feed_mm_min = float(payload.get("feed_mm_min", config.feed_mm_min))
-        lines = bridge.move_relative(x_mm=x_mm, y_mm=y_mm, feed_mm_min=feed_mm_min)
-        return jsonify({"command": {"x_mm": x_mm, "y_mm": y_mm}, "lines": lines})
+        result = bridge.verified_move_relative(x_mm=x_mm, y_mm=y_mm, feed_mm_min=feed_mm_min)
+        return jsonify(
+            {
+                "command": {"x_mm": x_mm, "y_mm": y_mm},
+                "lines": result["lines"],
+                "before_status": result["before_status"],
+                "after_status": result["after_status"],
+                "before_position": result["before_position"],
+                "after_position": result["after_position"],
+                "delta": result["delta"],
+                "moved": result["moved"],
+            }
+        )
 
     @app.route("/axis/move-absolute", methods=["POST", "OPTIONS"])
     def axis_move_absolute():

@@ -548,6 +548,13 @@
           throw new Error(controllerError);
         }
 
+        if (payload.moved === false) {
+          const delta = payload.delta || {};
+          const deltaX = Number(delta.x_mm || 0).toFixed(3);
+          const deltaY = Number(delta.y_mm || 0).toFixed(3);
+          throw new Error(`axis accepted move but WPos did not change; measured delta X=${deltaX} Y=${deltaY}`);
+        }
+
         return payload;
       }
 

@@ -112,6 +112,25 @@
         return buildBoardCapturePlan(settings).imagesPerBoard;
       }
 
+      function captureAlignmentModeForSettings(settings = readBoardSettings()) {
+        const needsHorizontalTravel = settings.widthMm > settings.fovWidthMm;
+        const needsVerticalTravel = settings.heightMm > settings.fovHeightMm;
+
+        if (needsHorizontalTravel && needsVerticalTravel) {
+          return "corner";
+        }
+
+        if (needsVerticalTravel) {
+          return "bottom";
+        }
+
+        if (needsHorizontalTravel) {
+          return "right";
+        }
+
+        return "none";
+      }
+
       function buildBoardCapturePlan(settings = readBoardSettings(), origin = "center") {
         const columns = imageCountForDimension(settings.widthMm, settings.fovWidthMm);
         const rows = imageCountForDimension(settings.heightMm, settings.fovHeightMm);

@@ -25,10 +25,11 @@ async function captureBoardImageSet(options = {}) {
         const boardNumber = nextBoardNumber;
         const capturedImages = [];
         if (alignFromCamera && capturePlan.requiresAxisTravel) {
-          const alignedOrigin = await alignCameraToVisibleBoardCorner(logPrefix);
+          const alignmentMode = captureAlignmentModeForSettings(settings);
+          const alignedOrigin = await alignCameraForCaptureMode(logPrefix, alignmentMode);
           if (!alignedOrigin) {
-            lastCaptureFailureReason = "board corner alignment failed";
-            setMachineStatus("CORNER ALIGN FAILED", "error");
+            lastCaptureFailureReason = `${alignmentMode} alignment failed`;
+            setMachineStatus("ALIGNMENT FAILED", "error");
             return false;
           }
         }
@@ -154,14 +155,38 @@ async function captureBoardImageSet(options = {}) {
         });
       }
 
-      async function alignCameraToVisibleBoardCorner(logPrefix) {
-        const video = document.getElementById("webcam-preview");
-        if (!video.videoWidth || !video.videoHeight) {
-          appendTerminalLine(`[${logPrefix}] cannot align corner. Camera frame is not ready.`);
+      async function alignCameraForCaptureMode(logPrefix, alignmentMode) {
+        if (alignmentMode === "none") {
+          return readAxisWorkPosition();
+        }
+
+        if (alignmentMode === "bottom") {
+          appendTerminalLine(`[${logPrefix}] board fits FOV width. Aligning bottom edge only.`);
+          return alignCameraToVisibleBoardEdge(logPrefix, "bottom");
+        }
+
+        if (alignmentMode === "right") {
+          appendTerminalLine(`[${logPrefix}] board fits FOV height. Aligning right edge only.`);
+          return alignCameraToVisibleBoardEdge(logPrefix, "right");
+        }
+
+        appendTerminalLine(`[${logPrefix}] board exceeds FOV width and height. Aligning visible corner.`);
+        const bottomAligned = await alignCameraToVisibleBoardEdge(logPrefix, "bottom");
+        if (!bottomAligned) {
           return null;
         }
 
-        let bottomAlignSign = CAPTURE_BOTTOM_SIGN_Y;
+        return alignCameraToVisibleBoardEdge(logPrefix, "right");
+      }
+
+      async function alignCameraToVisibleBoardEdge(logPrefix, edge) {
+        const video = document.getElementById("webcam-preview");
+        if (!video.videoWidth || !video.videoHeight) {
+          appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Camera frame is not ready.`);
+          return null;
+        }
+
+        let edgeAlignSign = edge === "right" ? CAPTURE_RIGHT_SIGN_X : CAPTURE_BOTTOM_SIGN_Y;
         let previousAbsOffset = null;
         let missingEdgeFrames = 0;
 
@@ -176,7 +201,7 @@ async function captureBoardImageSet(options = {}) {
             }
 
             if (missingEdgeFrames >= CAPTURE_CORNER_EDGE_WAIT_FRAMES) {
-              appendTerminalLine(`[${logPrefix}] cannot align corner. No board edge is visible.`);
+              appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. No board edge is visible.`);
               return null;
             }
 
@@ -185,46 +210,63 @@ async function captureBoardImageSet(options = {}) {
           }
 
           missingEdgeFrames = 0;
-          const yOffset = visibleBoardBottomOffset(board, video);
-          const absOffset = Math.abs(yOffset);
+          const edgeOffset = visibleBoardEdgeOffset(board, video, edge);
+          const absOffset = Math.abs(edgeOffset);
 
           if (
             previousAbsOffset !== null &&
             absOffset > previousAbsOffset + 0.01
           ) {
-            bottomAlignSign *= -1;
+            edgeAlignSign *= -1;
             appendTerminalLine(
-              `[${logPrefix}] bottom alignment direction reversed; offset got worse (${previousAbsOffset.toFixed(3)} -> ${absOffset.toFixed(3)})`
+              `[${logPrefix}] ${edge} alignment direction reversed; offset got worse (${previousAbsOffset.toFixed(3)} -> ${absOffset.toFixed(3)})`
             );
           }
 
-          if (Math.abs(yOffset) <= CAPTURE_CORNER_ALIGN_DEADBAND) {
+          if (Math.abs(edgeOffset) <= CAPTURE_CORNER_ALIGN_DEADBAND) {
             const position = await readAxisWorkPosition();
             appendTerminalLine(
-              `[${logPrefix}] bottom edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
+              `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
             );
             return position;
           }
 
-          const yMove = cornerCorrectionMoveFromOffset(yOffset, bottomAlignSign);
+          const correctionMove = cornerCorrectionMoveFromOffset(edgeOffset, edgeAlignSign);
+          const xMove = edge === "right" ? correctionMove : 0;
+          const yMove = edge === "bottom" ? correctionMove : 0;
           appendTerminalLine(
-            `[${logPrefix}] bottom align ${step}/${CAPTURE_CORNER_ALIGN_MAX_STEPS} bottomOffset=${yOffset.toFixed(3)} moveY=${yMove.toFixed(2)}mm`
+            `[${logPrefix}] ${edge} align ${step}/${CAPTURE_CORNER_ALIGN_MAX_STEPS} offset=${edgeOffset.toFixed(3)} moveX=${xMove.toFixed(2)}mm moveY=${yMove.toFixed(2)}mm`
           );
-          await postAxis("/axis/move", {
-            x_mm: 0,
+          const movePayload = await postAxis("/axis/move", {
+            x_mm: xMove,
             y_mm: yMove,
             feed_mm_min: CAPTURE_CORNER_FEED_MM_MIN
           });
+          const finalMoveLine = Array.isArray(movePayload.lines)
+            ? movePayload.lines[movePayload.lines.length - 1]
+            : "";
+          const measuredDelta = movePayload.delta || {};
+          const measuredX = Number(measuredDelta.x_mm || 0).toFixed(2);
+          const measuredY = Number(measuredDelta.y_mm || 0).toFixed(2);
+          appendTerminalLine(
+            `[${logPrefix}] axis move complete dX=${measuredX}mm dY=${measuredY}mm ${finalMoveLine}`
+          );
           await wait(CAPTURE_CORNER_SETTLE_MS);
           previousAbsOffset = absOffset;
           step += 1;
         }
 
-        appendTerminalLine(`[${logPrefix}] bottom alignment failed. Board bottom never reached target.`);
+        appendTerminalLine(`[${logPrefix}] ${edge} alignment failed. Board edge never reached target.`);
         return null;
       }
 
-      function visibleBoardBottomOffset(board, video) {
+      function visibleBoardEdgeOffset(board, video, edge) {
+        if (edge === "right") {
+          const boardRight = board.x + board.width;
+          const targetRight = video.videoWidth * (1 - CAPTURE_BOTTOM_MARGIN_RATIO);
+          return (boardRight - targetRight) / video.videoWidth;
+        }
+
         const boardBottom = board.y + board.height;
         const targetBottom = video.videoHeight * (1 - CAPTURE_BOTTOM_MARGIN_RATIO);
         return (boardBottom - targetBottom) / video.videoHeight;
