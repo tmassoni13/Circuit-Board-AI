@@ -618,6 +618,14 @@
         return payload;
       }
 
+      async function moveAxisRelative(xMm, yMm, feedMmMin = SEARCH_FEED_MM_MIN) {
+        return postAxis("/axis/move", {
+          x_mm: xMm,
+          y_mm: yMm,
+          feed_mm_min: feedMmMin
+        });
+      }
+
       async function jogAxis(xMm, yMm) {
         if (!axisBridgeConnected) {
           await connectAxis();
@@ -629,11 +637,7 @@
         }
 
         try {
-          const payload = await postAxis("/axis/move", {
-            x_mm: xMm,
-            y_mm: yMm,
-            feed_mm_min: SEARCH_FEED_MM_MIN
-          });
+          const payload = await moveAxisRelative(xMm, yMm, SEARCH_FEED_MM_MIN);
           const delta = payload.delta || {};
           appendTerminalLine(
             `[AXIS] jog requested X=${xMm.toFixed(1)} Y=${yMm.toFixed(1)} measured X=${Number(delta.x_mm || 0).toFixed(2)} Y=${Number(delta.y_mm || 0).toFixed(2)}`

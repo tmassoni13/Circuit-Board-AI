@@ -148,11 +148,7 @@ async function captureBoardImageSet(options = {}) {
           `[CAPTURE MOVE] relative X=${xMove.toFixed(1)}mm Y=${yMove.toFixed(1)}mm`
         );
 
-        await postAxis("/axis/move", {
-          x_mm: xMove,
-          y_mm: yMove,
-          feed_mm_min: SEARCH_FEED_MM_MIN
-        });
+        await moveAxisRelative(xMove, yMove, SEARCH_FEED_MM_MIN);
       }
 
       async function alignCameraForCaptureMode(logPrefix, alignmentMode) {
@@ -240,11 +236,7 @@ async function captureBoardImageSet(options = {}) {
           appendTerminalLine(
             `[${logPrefix}] ${edge} align ${step}/${CAPTURE_CORNER_ALIGN_MAX_STEPS} offset=${edgeOffset.toFixed(3)} moveX=${xMove.toFixed(2)}mm moveY=${yMove.toFixed(2)}mm`
           );
-          const movePayload = await postAxis("/axis/move", {
-            x_mm: xMove,
-            y_mm: yMove,
-            feed_mm_min: CAPTURE_CORNER_FEED_MM_MIN
-          });
+          const movePayload = await moveAxisRelative(xMove, yMove, CAPTURE_CORNER_FEED_MM_MIN);
           const finalMoveLine = Array.isArray(movePayload.lines)
             ? movePayload.lines[movePayload.lines.length - 1]
             : "";
