@@ -121,10 +121,10 @@
           return;
         }
 
-        if (appCycleIsActive() && reloadShortcutWasPressed(event)) {
+        if ((appCycleIsActive() || appIsInStartupReloadGuardWindow()) && reloadShortcutWasPressed(event)) {
           event.preventDefault();
           event.stopPropagation();
-          appendTerminalLine("[SYSTEM] Reload blocked while machine cycle is active.");
+          appendTerminalLine("[SYSTEM] Reload blocked while PCB AI is starting or running.");
         }
       }
 
@@ -151,13 +151,17 @@
         );
       }
 
+      function appIsInStartupReloadGuardWindow() {
+        return Date.now() - appOpenedAtMs < RELOAD_GUARD_AFTER_OPEN_MS;
+      }
+
       function protectActiveCycleFromReload(event) {
-        if (!appCycleIsActive()) {
+        if (!appCycleIsActive() && !appIsInStartupReloadGuardWindow()) {
           return;
         }
 
         event.preventDefault();
-        event.returnValue = "Machine cycle is active. Stop the machine before reloading.";
+        event.returnValue = "PCB AI is starting or running. Stop the machine before reloading.";
         return event.returnValue;
       }
 

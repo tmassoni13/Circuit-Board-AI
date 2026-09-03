@@ -14,7 +14,7 @@
       const CAPTURE_CORNER_MIN_STEP_MM = 8;
       const CAPTURE_CORNER_MAX_STEP_MM = 30;
       const CAPTURE_CORNER_MM_PER_OFFSET = 160;
-      const CAPTURE_CORNER_SETTLE_MS = 500;
+      const CAPTURE_CORNER_SETTLE_MS = 1000;
       const CAPTURE_CORNER_EDGE_WAIT_FRAMES = 20;
       const CAPTURE_CORNER_EDGE_WAIT_MS = 100;
       const CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM = 20;
@@ -105,7 +105,8 @@
       const AXIS_BRIDGE_REQUEST_TIMEOUT_MS = 2500;
       const AUTO_CONVEYOR_POLL_INTERVAL_MS = 75;
       const CONVEYOR_MOVE_TO_CAMERA_TIMEOUT_MS = 20000;
-      const CAMERA_SENSOR_SETTLE_MS = 1000;
+      const CAMERA_SENSOR_SETTLE_MS = 2000;
+      const RELOAD_GUARD_AFTER_OPEN_MS = 90000;
 
       let autoScanTimer = null;
       let stableBoardFrames = 0;
@@ -178,4 +179,5 @@
       let lastCaptureFailureReason = "";
       let captureCancelToken = 0;
       let lastCaptureCancelLogToken = null;
+      let appOpenedAtMs = Date.now();
 

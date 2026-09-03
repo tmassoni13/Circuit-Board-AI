@@ -234,10 +234,11 @@ async function captureBoardImageSet(options = {}) {
         }
 
         if (!edgeReading) {
+          const position = await readAxisWorkPosition();
           appendTerminalLine(
-            `[${logPrefix}] ${edge} alignment failed. No edge found after ${CAPTURE_EDGE_MAX_SEARCH_MOVES} search moves.`
+            `[${logPrefix}] no ${edge} edge found after ${CAPTURE_EDGE_MAX_SEARCH_MOVES} search moves. Continuing from WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}.`
           );
-          return null;
+          return position;
         }
 
         const offsetMm = edgeOffsetMm(edgeReading);
@@ -246,7 +247,7 @@ async function captureBoardImageSet(options = {}) {
           `[${logPrefix}] ${edge} edge found. offset=${offsetMm.toFixed(1)}mm targetTolerance=${toleranceMm.toFixed(1)}mm.`
         );
 
-        if (Math.abs(offsetMm) <= toleranceMm) {
+        if (Math.abs(offsetMm) < 1) {
           const position = await readAxisWorkPosition();
           appendTerminalLine(
             `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
@@ -254,17 +255,14 @@ async function captureBoardImageSet(options = {}) {
           return position;
         }
 
-        const autoCorrectDistanceMm = Math.min(
-          Math.abs(offsetMm),
-          CAPTURE_EDGE_AUTO_CORRECT_MAX_MM
-        );
+        const autoCorrectDistanceMm = Math.abs(offsetMm);
         const autoCorrectMoveMm = signedEdgeCorrectionMove(
           offsetMm,
           edge,
           autoCorrectDistanceMm
         );
         appendTerminalLine(
-          `[${logPrefix}] ${edge} edge correction offset=${offsetMm.toFixed(1)}mm ${axisMoveLog(edge, autoCorrectMoveMm)}`
+          `[${logPrefix}] ${edge} edge correction to FOV edge ${axisMoveLog(edge, autoCorrectMoveMm)}`
         );
         if (captureWasCanceled(cancelToken, requireMachineRunning)) {
           return null;
@@ -280,10 +278,11 @@ async function captureBoardImageSet(options = {}) {
 
         const finalEdgeReading = findSelectedColorBoardEdge(video, edge);
         if (!finalEdgeReading) {
+          const position = await readAxisWorkPosition();
           appendTerminalLine(
-            `[${logPrefix}] ${edge} alignment failed. Edge disappeared after correction.`
+            `[${logPrefix}] ${edge} edge moved to camera boundary at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
           );
-          return null;
+          return position;
         }
 
         const finalOffsetMm = edgeOffsetMm(finalEdgeReading);
@@ -296,9 +295,9 @@ async function captureBoardImageSet(options = {}) {
         }
 
         appendTerminalLine(
-          `[${logPrefix}] ${edge} alignment failed. Edge still outside tolerance after correction. offset=${finalOffsetMm.toFixed(1)}mm`
+          `[${logPrefix}] ${edge} edge still outside tolerance after correction. Continuing anyway. offset=${finalOffsetMm.toFixed(1)}mm`
         );
-        return null;
+        return readAxisWorkPosition();
       }
 
       function captureWasCanceled(cancelToken, requireMachineRunning = true) {
@@ -382,7 +381,7 @@ async function captureBoardImageSet(options = {}) {
           if (aboveColor >= minBoardPixels && belowColor <= belowRandomPixels) {
             return {
               edgePixel: y * (video.videoHeight / sampleHeight),
-              targetPixel: video.videoHeight * (1 - CAPTURE_BOTTOM_MARGIN_RATIO),
+              targetPixel: video.videoHeight - 1,
               pixelsPerMm: video.videoHeight / settings.fovHeightMm
             };
           }
@@ -402,7 +401,7 @@ async function captureBoardImageSet(options = {}) {
           if (leftColor >= minBoardPixels && rightColor <= outsideRandomPixels) {
             return {
               edgePixel: x * (video.videoWidth / sampleWidth),
-              targetPixel: video.videoWidth * (1 - CAPTURE_BOTTOM_MARGIN_RATIO),
+              targetPixel: video.videoWidth - 1,
               pixelsPerMm: video.videoWidth / settings.fovWidthMm
             };
           }
