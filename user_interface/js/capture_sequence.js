@@ -223,7 +223,7 @@ async function captureBoardImageSet(options = {}) {
             edge === "bottom" ? searchMoveMm : 0,
             CAPTURE_CORNER_FEED_MM_MIN
           );
-          if (!await waitForCapture(CAPTURE_CORNER_SETTLE_MS, cancelToken, requireMachineRunning)) {
+          if (!await waitForCapture(CAPTURE_EDGE_SEARCH_SETTLE_MS, cancelToken, requireMachineRunning)) {
             return null;
           }
           edgeReading = findSelectedColorBoardEdge(video, edge);

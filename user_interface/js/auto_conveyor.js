@@ -19,6 +19,7 @@
         autoConveyorBusy = false;
         autoConveyorMoveDirection = "stopped";
         ignoreEndSensorUntilNextBoard = false;
+        nextCaptureRequiresStartSensor = false;
         autoScanTimer = window.setInterval(scanForBoard, AUTO_CONVEYOR_POLL_INTERVAL_MS);
       }
 
@@ -46,6 +47,7 @@
         autoConveyorBusy = false;
         autoConveyorMoveDirection = "stopped";
         ignoreEndSensorUntilNextBoard = false;
+        nextCaptureRequiresStartSensor = false;
       }
 
       async function scanForBoard() {
@@ -78,6 +80,18 @@
         updateSelectedColorBoardOverlay();
 
         if (autoConveyorState === "searching") {
+          if (nextCaptureRequiresStartSensor) {
+            if (startDetected) {
+              ignoreEndSensorUntilNextBoard = false;
+              nextCaptureRequiresStartSensor = false;
+              await moveBoardToCameraWithBackendStop("forward", "new board detected at start sensor");
+              return;
+            }
+
+            setMachineStatus("WAITING FOR BOARD", "searching");
+            return;
+          }
+
           if (cameraDetected) {
             ignoreEndSensorUntilNextBoard = false;
             await stopAutoConveyorMotion(true);
@@ -122,12 +136,13 @@
 
         if (autoConveyorState === "moving_to_end") {
           if (endDetected) {
-            await stopAutoConveyorMotion();
+            await stopAutoConveyorMotion(true);
             autoConveyorState = "searching";
             capturedCurrentBoard = false;
             waitingForNextBoard = false;
             ignoreEndSensorUntilNextBoard = true;
-            appendTerminalLine("[BOARD] board reached end sensor. Ready for next board at Start or Camera.");
+            nextCaptureRequiresStartSensor = true;
+            appendTerminalLine("[BOARD] board reached end sensor. Ready for the next board from Start.");
             setMachineStatus("WAITING FOR BOARD", "searching");
           }
           return;

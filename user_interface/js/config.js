@@ -20,6 +20,7 @@
       const CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM = 20;
       const CAPTURE_EDGE_NO_EDGE_SEARCH_MM = 25;
       const CAPTURE_EDGE_MAX_SEARCH_MOVES = 4;
+      const CAPTURE_EDGE_SEARCH_SETTLE_MS = 2000;
       const CAPTURE_EDGE_AUTO_CORRECT_MAX_MM = 120;
       const AXIS_RELATIVE_SIGN_X = -1;
       const AXIS_RELATIVE_SIGN_Y = 1;
@@ -176,6 +177,7 @@
       let autoConveyorBusy = false;
       let autoConveyorMoveDirection = "stopped";
       let ignoreEndSensorUntilNextBoard = false;
+      let nextCaptureRequiresStartSensor = false;
       let lastCaptureFailureReason = "";
       let captureCancelToken = 0;
       let lastCaptureCancelLogToken = null;
