@@ -19,7 +19,7 @@ async function captureBoardImageSet(options = {}) {
 
         setMachineStatus("CAPTURING", "running");
         appendTerminalLine(
-          `[${logPrefix} PLAN] board=${settings.widthMm}x${settings.heightMm}mm fov=${settings.fovWidthMm}x${settings.fovHeightMm}mm step=${capturePlan.useFullFovStep ? "full FOV" : `${CAPTURE_OVERLAP_MM}mm overlap`} tiles=${capturePlan.columns}x${capturePlan.rows} images=${capturePlan.imagesPerBoard}`
+          `[${logPrefix} PLAN] board=${settings.widthMm}x${settings.heightMm}mm fov=${settings.fovWidthMm}x${settings.fovHeightMm}mm step=${capturePlan.useFullFovStep ? `full FOV + ${CAPTURE_MULTI_IMAGE_EXTRA_STEP_MM}mm` : `${CAPTURE_OVERLAP_MM}mm overlap`} tiles=${capturePlan.columns}x${capturePlan.rows} images=${capturePlan.imagesPerBoard}`
         );
 
         let previousCaptureTarget = null;

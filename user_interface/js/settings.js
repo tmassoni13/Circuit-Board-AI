@@ -196,7 +196,12 @@
           return [0];
         }
 
-        const stepMm = Math.max(1, useFullFovStep ? fovMm : fovMm - CAPTURE_OVERLAP_MM);
+        const stepMm = Math.max(
+          1,
+          useFullFovStep
+            ? fovMm + CAPTURE_MULTI_IMAGE_EXTRA_STEP_MM
+            : fovMm - CAPTURE_OVERLAP_MM
+        );
         const totalTravelMm = stepMm * (count - 1);
         const startMm = origin === "corner" ? 0 : -totalTravelMm / 2;
         const positions = [];
