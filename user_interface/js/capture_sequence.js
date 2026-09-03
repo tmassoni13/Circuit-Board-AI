@@ -183,134 +183,41 @@ async function captureBoardImageSet(options = {}) {
         }
 
         clearBoardOverlay();
-        let missingEdgeFrames = 0;
+        let edgeReading = findSelectedColorBoardEdge(video, edge);
+        let searchMoves = 0;
 
-        for (let frame = 1; frame <= CAPTURE_CORNER_EDGE_WAIT_FRAMES; frame += 1) {
-          const edgeReading = findSelectedColorBoardEdge(video, edge);
-          if (!edgeReading) {
-            missingEdgeFrames += 1;
-            if (missingEdgeFrames === 1 || missingEdgeFrames % 5 === 0) {
-              appendTerminalLine(
-                `[${logPrefix}] waiting for visible board edge ${missingEdgeFrames}/${CAPTURE_CORNER_EDGE_WAIT_FRAMES}.`
-              );
-            }
-
-            await wait(CAPTURE_CORNER_EDGE_WAIT_MS);
-            continue;
-          }
-
-          const initialOffsetMm = edgeOffsetMm(edgeReading, edge);
-          const toleranceMm = CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM;
-
+        while (!edgeReading && searchMoves < CAPTURE_EDGE_MAX_SEARCH_MOVES) {
+          const searchMoveMm = missingEdgeSearchMove(edge);
+          searchMoves += 1;
           appendTerminalLine(
-            `[${logPrefix}] ${edge} edge visible. offset=${initialOffsetMm.toFixed(1)}mm targetTolerance=${toleranceMm.toFixed(1)}mm`
-          );
-
-          if (Math.abs(initialOffsetMm) <= toleranceMm) {
-            const position = await readAxisWorkPosition();
-            appendTerminalLine(
-              `[${logPrefix}] ${edge} edge already aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
-            );
-            return position;
-          }
-
-          const jumpMoveMm = signedEdgeCorrectionMove(initialOffsetMm, edge, CAPTURE_EDGE_INITIAL_JUMP_MM);
-          appendTerminalLine(
-            `[${logPrefix}] ${edge} edge coarse move ${axisMoveLog(edge, jumpMoveMm)}`
+            `[${logPrefix}] no ${edge} edge visible. Search move ${searchMoves}/${CAPTURE_EDGE_MAX_SEARCH_MOVES} ${axisMoveLog(edge, searchMoveMm)}.`
           );
           await moveAxisRelative(
-            edge === "right" ? jumpMoveMm : 0,
-            edge === "bottom" ? jumpMoveMm : 0,
+            edge === "right" ? searchMoveMm : 0,
+            edge === "bottom" ? searchMoveMm : 0,
             CAPTURE_CORNER_FEED_MM_MIN
           );
           await wait(CAPTURE_CORNER_SETTLE_MS);
-
-          const correctedEdgeReading = findSelectedColorBoardEdge(video, edge);
-          if (!correctedEdgeReading) {
-            appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Edge disappeared after coarse move.`);
-            return null;
-          }
-
-          const correctedOffsetMm = edgeOffsetMm(correctedEdgeReading, edge);
-          if (Math.abs(correctedOffsetMm) <= toleranceMm) {
-            const position = await readAxisWorkPosition();
-            appendTerminalLine(
-              `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
-            );
-            return position;
-          }
-
-          const autoCorrectDistanceMm = Math.min(
-            Math.abs(correctedOffsetMm),
-            CAPTURE_EDGE_AUTO_CORRECT_MAX_MM
-          );
-          const autoCorrectMoveMm = signedEdgeCorrectionMove(
-            correctedOffsetMm,
-            edge,
-            autoCorrectDistanceMm
-          );
-          appendTerminalLine(
-            `[${logPrefix}] ${edge} edge auto-correct offset=${correctedOffsetMm.toFixed(1)}mm ${axisMoveLog(edge, autoCorrectMoveMm)}`
-          );
-          const movePayload = await moveAxisRelative(
-            edge === "right" ? autoCorrectMoveMm : 0,
-            edge === "bottom" ? autoCorrectMoveMm : 0,
-            CAPTURE_CORNER_FEED_MM_MIN
-          );
-          const finalMoveLine = Array.isArray(movePayload.lines)
-            ? movePayload.lines[movePayload.lines.length - 1]
-            : "";
-          const measuredDelta = movePayload.delta || {};
-          const measuredX = Number(measuredDelta.x_mm || 0).toFixed(2);
-          const measuredY = Number(measuredDelta.y_mm || 0).toFixed(2);
-          appendTerminalLine(
-            `[${logPrefix}] axis move complete dX=${measuredX}mm dY=${measuredY}mm ${finalMoveLine}`
-          );
-          await wait(CAPTURE_CORNER_SETTLE_MS);
-
-          const finalEdgeReading = findSelectedColorBoardEdge(video, edge);
-          if (!finalEdgeReading) {
-            appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Edge disappeared after auto-correct.`);
-            return null;
-          }
-
-          const finalOffsetMm = edgeOffsetMm(finalEdgeReading, edge);
-          if (Math.abs(finalOffsetMm) <= toleranceMm) {
-            const position = await readAxisWorkPosition();
-            appendTerminalLine(
-              `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
-            );
-            return position;
-          }
-
-          appendTerminalLine(
-            `[${logPrefix}] ${edge} edge still outside tolerance after auto-correct. offset=${finalOffsetMm.toFixed(1)}mm`
-          );
-          return null;
+          edgeReading = findSelectedColorBoardEdge(video, edge);
         }
 
-        const searchMoveMm = missingEdgeSearchMove(edge);
-        appendTerminalLine(
-          `[${logPrefix}] no ${edge} edge visible. Starting ${axisMoveLog(edge, searchMoveMm)} search move.`
-        );
-        await moveAxisRelative(
-          edge === "right" ? searchMoveMm : 0,
-          edge === "bottom" ? searchMoveMm : 0,
-          CAPTURE_CORNER_FEED_MM_MIN
-        );
-        await wait(CAPTURE_CORNER_SETTLE_MS);
-
-        const edgeReading = findSelectedColorBoardEdge(video, edge);
         if (!edgeReading) {
-          appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. No board edge was visible after search move.`);
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} alignment failed. No edge found after ${CAPTURE_EDGE_MAX_SEARCH_MOVES} search moves.`
+          );
           return null;
         }
 
-        const offsetMm = edgeOffsetMm(edgeReading, edge);
-        if (Math.abs(offsetMm) <= CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM) {
+        const offsetMm = edgeOffsetMm(edgeReading);
+        const toleranceMm = CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM;
+        appendTerminalLine(
+          `[${logPrefix}] ${edge} edge found. offset=${offsetMm.toFixed(1)}mm targetTolerance=${toleranceMm.toFixed(1)}mm.`
+        );
+
+        if (Math.abs(offsetMm) <= toleranceMm) {
           const position = await readAxisWorkPosition();
           appendTerminalLine(
-            `[${logPrefix}] ${edge} edge aligned after search move at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
+            `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
           );
           return position;
         }
@@ -325,7 +232,7 @@ async function captureBoardImageSet(options = {}) {
           autoCorrectDistanceMm
         );
         appendTerminalLine(
-          `[${logPrefix}] ${edge} edge search auto-correct offset=${offsetMm.toFixed(1)}mm ${axisMoveLog(edge, autoCorrectMoveMm)}`
+          `[${logPrefix}] ${edge} edge correction offset=${offsetMm.toFixed(1)}mm ${axisMoveLog(edge, autoCorrectMoveMm)}`
         );
         await moveAxisRelative(
           edge === "right" ? autoCorrectMoveMm : 0,
@@ -336,11 +243,13 @@ async function captureBoardImageSet(options = {}) {
 
         const finalEdgeReading = findSelectedColorBoardEdge(video, edge);
         if (!finalEdgeReading) {
-          appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Edge disappeared after search auto-correct.`);
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} alignment failed. Edge disappeared after correction.`
+          );
           return null;
         }
 
-        const finalOffsetMm = edgeOffsetMm(finalEdgeReading, edge);
+        const finalOffsetMm = edgeOffsetMm(finalEdgeReading);
         if (Math.abs(finalOffsetMm) <= CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM) {
           const position = await readAxisWorkPosition();
           appendTerminalLine(
@@ -350,7 +259,7 @@ async function captureBoardImageSet(options = {}) {
         }
 
         appendTerminalLine(
-          `[${logPrefix}] ${edge} edge still outside tolerance after search auto-correct. offset=${finalOffsetMm.toFixed(1)}mm`
+          `[${logPrefix}] ${edge} alignment failed. Edge still outside tolerance after correction. offset=${finalOffsetMm.toFixed(1)}mm`
         );
         return null;
       }
