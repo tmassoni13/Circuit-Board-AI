@@ -224,7 +224,10 @@
 
         try {
           if (!capturePlan.requiresAxisTravel) {
-            appendTerminalLine("[BOARD] board fits inside FOV. Holding X0 Y0 for single image.");
+            appendTerminalLine("[BOARD] board fits inside FOV. Verifying full board is contained before single image.");
+            if (!await ensureSmallBoardContainedBeforeCapture(captureCancelToken, true)) {
+              return;
+            }
             const captureComplete = await captureBoardImageSet({ awaitAnalysis: false });
             if (!captureComplete) {
               await holdBoardAtCameraAfterCaptureFailure();

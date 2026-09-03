@@ -173,6 +173,85 @@ async function captureBoardImageSet(options = {}) {
         await moveAxisRelative(xMove, yMove, SEARCH_FEED_MM_MIN);
       }
 
+      async function ensureSmallBoardContainedBeforeCapture(cancelToken, requireMachineRunning = true) {
+        const video = document.getElementById("webcam-preview");
+        if (!video.videoWidth || !video.videoHeight) {
+          appendTerminalLine("[BOARD] containment check skipped. Camera frame is not ready.");
+          return true;
+        }
+
+        if (!axisBridgeConnected) {
+          await connectAxis();
+        }
+
+        if (!axisBridgeConnected) {
+          appendTerminalLine("[BOARD] containment correction skipped. 2D axis is not connected.");
+          return true;
+        }
+
+        for (let attempt = 0; attempt <= SMALL_BOARD_CONTAINMENT_MAX_JOGS; attempt += 1) {
+          if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+            return false;
+          }
+
+          const board = findBoardBySelectedColor(video);
+          if (!board) {
+            appendTerminalLine("[BOARD] containment check skipped. Board color was not visible.");
+            return true;
+          }
+
+          const correction = smallBoardContainmentCorrection(board, video);
+          if (!correction.needsMove) {
+            appendTerminalLine("[BOARD] board fully contained in camera FOV.");
+            return true;
+          }
+
+          if (attempt >= SMALL_BOARD_CONTAINMENT_MAX_JOGS) {
+            appendTerminalLine(
+              `[BOARD] board still near FOV edge after ${SMALL_BOARD_CONTAINMENT_MAX_JOGS} containment jogs. Capturing from current position.`
+            );
+            return true;
+          }
+
+          appendTerminalLine(
+            `[BOARD] board not fully contained. Containment jog X=${correction.xMm.toFixed(1)}mm Y=${correction.yMm.toFixed(1)}mm.`
+          );
+          await moveAxisRelative(correction.xMm, correction.yMm, SEARCH_FEED_MM_MIN);
+          if (!await waitForCapture(SMALL_BOARD_CONTAINMENT_SETTLE_MS, cancelToken, requireMachineRunning)) {
+            return false;
+          }
+        }
+
+        return true;
+      }
+
+      function smallBoardContainmentCorrection(board, video) {
+        const marginX = video.videoWidth * SMALL_BOARD_CONTAINMENT_MARGIN_RATIO;
+        const marginY = video.videoHeight * SMALL_BOARD_CONTAINMENT_MARGIN_RATIO;
+        const boardRight = board.x + board.width;
+        const boardBottom = board.y + board.height;
+        let xMm = 0;
+        let yMm = 0;
+
+        if (board.x <= marginX) {
+          xMm = -SMALL_BOARD_CONTAINMENT_JOG_MM;
+        } else if (boardRight >= video.videoWidth - marginX) {
+          xMm = SMALL_BOARD_CONTAINMENT_JOG_MM;
+        }
+
+        if (board.y <= marginY) {
+          yMm = SMALL_BOARD_CONTAINMENT_JOG_MM;
+        } else if (boardBottom >= video.videoHeight - marginY) {
+          yMm = -SMALL_BOARD_CONTAINMENT_JOG_MM;
+        }
+
+        return {
+          needsMove: xMm !== 0 || yMm !== 0,
+          xMm,
+          yMm
+        };
+      }
+
       async function alignCameraForCaptureMode(logPrefix, alignmentMode, cancelToken, requireMachineRunning) {
         if (alignmentMode === "none") {
           return readAxisWorkPosition();
