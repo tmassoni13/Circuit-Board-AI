@@ -289,7 +289,69 @@ async function captureBoardImageSet(options = {}) {
           return null;
         }
 
-        appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. No board edge is visible.`);
+        const searchMoveMm = missingEdgeSearchMove(edge);
+        appendTerminalLine(
+          `[${logPrefix}] no ${edge} edge visible. Starting ${axisMoveLog(edge, searchMoveMm)} search move.`
+        );
+        await moveAxisRelative(
+          edge === "right" ? searchMoveMm : 0,
+          edge === "bottom" ? searchMoveMm : 0,
+          CAPTURE_CORNER_FEED_MM_MIN
+        );
+        await wait(CAPTURE_CORNER_SETTLE_MS);
+
+        const edgeReading = findSelectedColorBoardEdge(video, edge);
+        if (!edgeReading) {
+          appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. No board edge was visible after search move.`);
+          return null;
+        }
+
+        const offsetMm = edgeOffsetMm(edgeReading, edge);
+        if (Math.abs(offsetMm) <= CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM) {
+          const position = await readAxisWorkPosition();
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} edge aligned after search move at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
+          );
+          return position;
+        }
+
+        const autoCorrectDistanceMm = Math.min(
+          Math.abs(offsetMm),
+          CAPTURE_EDGE_AUTO_CORRECT_MAX_MM
+        );
+        const autoCorrectMoveMm = signedEdgeCorrectionMove(
+          offsetMm,
+          edge,
+          autoCorrectDistanceMm
+        );
+        appendTerminalLine(
+          `[${logPrefix}] ${edge} edge search auto-correct offset=${offsetMm.toFixed(1)}mm ${axisMoveLog(edge, autoCorrectMoveMm)}`
+        );
+        await moveAxisRelative(
+          edge === "right" ? autoCorrectMoveMm : 0,
+          edge === "bottom" ? autoCorrectMoveMm : 0,
+          CAPTURE_CORNER_FEED_MM_MIN
+        );
+        await wait(CAPTURE_CORNER_SETTLE_MS);
+
+        const finalEdgeReading = findSelectedColorBoardEdge(video, edge);
+        if (!finalEdgeReading) {
+          appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Edge disappeared after search auto-correct.`);
+          return null;
+        }
+
+        const finalOffsetMm = edgeOffsetMm(finalEdgeReading, edge);
+        if (Math.abs(finalOffsetMm) <= CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM) {
+          const position = await readAxisWorkPosition();
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
+          );
+          return position;
+        }
+
+        appendTerminalLine(
+          `[${logPrefix}] ${edge} edge still outside tolerance after search auto-correct. offset=${finalOffsetMm.toFixed(1)}mm`
+        );
         return null;
       }
 
@@ -393,6 +455,12 @@ async function captureBoardImageSet(options = {}) {
       function signedEdgeCorrectionMove(offsetMm, edge, distanceMm) {
         const sign = edge === "right" ? CAPTURE_RIGHT_SIGN_X : CAPTURE_BOTTOM_SIGN_Y;
         return offsetMm < 0 ? distanceMm * sign : -distanceMm * sign;
+      }
+
+      function missingEdgeSearchMove(edge) {
+        return edge === "right"
+          ? CAPTURE_EDGE_NO_EDGE_SEARCH_MM * CAPTURE_RIGHT_SIGN_X
+          : -CAPTURE_EDGE_NO_EDGE_SEARCH_MM * CAPTURE_BOTTOM_SIGN_Y;
       }
 
       function axisMoveLog(edge, moveMm) {

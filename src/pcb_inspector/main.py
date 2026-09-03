@@ -62,6 +62,18 @@ def parse_float_field(payload, field_name, default):
         raise ValueError(f"Invalid number for {field_name}: {value!r}") from error
 
 
+def parse_content_length(headers):
+    """Return a safe request body length even if the browser sends a blank header."""
+    value = headers.get("Content-Length", "0")
+    if value is None or value == "":
+        return 0
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 class ConveyorIoController:
     """Small Jetson GPIO adapter for conveyor motor outputs and board sensors.
 
@@ -191,8 +203,8 @@ class ConveyorIoController:
         milliseconds, and cuts both direction relays as soon as the target
         sensor becomes active.
         """
-        direction_channel = int(direction_channel)
-        target_sensor = int(target_sensor)
+        direction_channel = parse_int_field({"direction_channel": direction_channel}, "direction_channel")
+        target_sensor = parse_int_field({"target_sensor": target_sensor}, "target_sensor")
         if direction_channel not in CONVEYOR_RELAY_OUTPUT_PINS:
             raise ValueError("Direction channel must be 1 or 2.")
         if target_sensor not in CONVEYOR_SENSOR_INPUT_PINS:
@@ -585,7 +597,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                 return
 
             try:
-                content_length = int(self.headers.get("Content-Length", "0"))
+                content_length = parse_content_length(self.headers)
                 raw_body = self.rfile.read(content_length).decode("utf-8")
                 payload = json.loads(raw_body or "{}")
 

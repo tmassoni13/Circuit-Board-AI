@@ -148,9 +148,8 @@
           return null;
         }
 
-        const smoothedBoard = smoothedBoardOverlay(board);
-        lastBoardBox = smoothedBoard;
-        drawBoardOverlay(smoothedBoard, board.confidence >= BOARD_MIN_CONFIDENCE);
+        lastBoardBox = board;
+        clearBoardOverlay();
         return board;
       }
 
