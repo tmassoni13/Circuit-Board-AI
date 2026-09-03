@@ -54,9 +54,9 @@ Current conveyor IO pinout uses physical Jetson header pin numbers:
 ```text
 Conveyor forward relay: pin 33
 Conveyor reverse relay: pin 35
-Start sensor: pin 31
+Start sensor: pin 29
 Camera/imaging sensor: pin 37
-End sensor: pin 29
+End sensor: pin 31
 ```
 
 The Omron E3Z-D61 sensor signals are expected to be reduced to Jetson-safe
