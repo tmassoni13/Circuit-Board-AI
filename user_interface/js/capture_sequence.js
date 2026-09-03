@@ -182,13 +182,12 @@ async function captureBoardImageSet(options = {}) {
           return null;
         }
 
-        let edgeAlignSign = edge === "right" ? CAPTURE_RIGHT_SIGN_X : CAPTURE_BOTTOM_SIGN_Y;
-        let previousAbsOffset = null;
+        clearBoardOverlay();
         let missingEdgeFrames = 0;
 
-        for (let step = 1; step <= CAPTURE_CORNER_ALIGN_MAX_STEPS;) {
-          const board = findBoardBySelectedColor(video);
-          if (!board) {
+        for (let frame = 1; frame <= CAPTURE_CORNER_EDGE_WAIT_FRAMES; frame += 1) {
+          const edgeReading = findSelectedColorBoardEdge(video, edge);
+          if (!edgeReading) {
             missingEdgeFrames += 1;
             if (missingEdgeFrames === 1 || missingEdgeFrames % 5 === 0) {
               appendTerminalLine(
@@ -196,33 +195,44 @@ async function captureBoardImageSet(options = {}) {
               );
             }
 
-            if (missingEdgeFrames >= CAPTURE_CORNER_EDGE_WAIT_FRAMES) {
-              appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. No board edge is visible.`);
-              return null;
-            }
-
             await wait(CAPTURE_CORNER_EDGE_WAIT_MS);
             continue;
           }
 
-          missingEdgeFrames = 0;
-          const smoothedBoard = smoothedBoardOverlay(board);
-          lastBoardBox = smoothedBoard;
-          drawBoardOverlay(smoothedBoard, board.confidence >= BOARD_MIN_CONFIDENCE);
-          const edgeOffset = visibleBoardEdgeOffset(board, video, edge);
-          const absOffset = Math.abs(edgeOffset);
+          const initialOffsetMm = edgeOffsetMm(edgeReading, edge);
+          const toleranceMm = CAPTURE_EDGE_ALIGNMENT_TOLERANCE_MM;
 
-          if (
-            previousAbsOffset !== null &&
-            absOffset > previousAbsOffset + 0.01
-          ) {
-            edgeAlignSign *= -1;
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} edge visible. offset=${initialOffsetMm.toFixed(1)}mm targetTolerance=${toleranceMm.toFixed(1)}mm`
+          );
+
+          if (Math.abs(initialOffsetMm) <= toleranceMm) {
+            const position = await readAxisWorkPosition();
             appendTerminalLine(
-              `[${logPrefix}] ${edge} alignment direction reversed; offset got worse (${previousAbsOffset.toFixed(3)} -> ${absOffset.toFixed(3)})`
+              `[${logPrefix}] ${edge} edge already aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
             );
+            return position;
           }
 
-          if (Math.abs(edgeOffset) <= CAPTURE_CORNER_ALIGN_DEADBAND) {
+          const jumpMoveMm = signedEdgeCorrectionMove(initialOffsetMm, edge, CAPTURE_EDGE_INITIAL_JUMP_MM);
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} edge coarse move ${axisMoveLog(edge, jumpMoveMm)}`
+          );
+          await moveAxisRelative(
+            edge === "right" ? jumpMoveMm : 0,
+            edge === "bottom" ? jumpMoveMm : 0,
+            CAPTURE_CORNER_FEED_MM_MIN
+          );
+          await wait(CAPTURE_CORNER_SETTLE_MS);
+
+          const correctedEdgeReading = findSelectedColorBoardEdge(video, edge);
+          if (!correctedEdgeReading) {
+            appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Edge disappeared after coarse move.`);
+            return null;
+          }
+
+          const correctedOffsetMm = edgeOffsetMm(correctedEdgeReading, edge);
+          if (Math.abs(correctedOffsetMm) <= toleranceMm) {
             const position = await readAxisWorkPosition();
             appendTerminalLine(
               `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
@@ -230,13 +240,23 @@ async function captureBoardImageSet(options = {}) {
             return position;
           }
 
-          const correctionMove = cornerCorrectionMoveFromOffset(edgeOffset, edgeAlignSign);
-          const xMove = edge === "right" ? correctionMove : 0;
-          const yMove = edge === "bottom" ? correctionMove : 0;
-          appendTerminalLine(
-            `[${logPrefix}] ${edge} align ${step}/${CAPTURE_CORNER_ALIGN_MAX_STEPS} offset=${edgeOffset.toFixed(3)} moveX=${xMove.toFixed(2)}mm moveY=${yMove.toFixed(2)}mm`
+          const autoCorrectDistanceMm = Math.min(
+            Math.abs(correctedOffsetMm),
+            CAPTURE_EDGE_AUTO_CORRECT_MAX_MM
           );
-          const movePayload = await moveAxisRelative(xMove, yMove, CAPTURE_CORNER_FEED_MM_MIN);
+          const autoCorrectMoveMm = signedEdgeCorrectionMove(
+            correctedOffsetMm,
+            edge,
+            autoCorrectDistanceMm
+          );
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} edge auto-correct offset=${correctedOffsetMm.toFixed(1)}mm ${axisMoveLog(edge, autoCorrectMoveMm)}`
+          );
+          const movePayload = await moveAxisRelative(
+            edge === "right" ? autoCorrectMoveMm : 0,
+            edge === "bottom" ? autoCorrectMoveMm : 0,
+            CAPTURE_CORNER_FEED_MM_MIN
+          );
           const finalMoveLine = Array.isArray(movePayload.lines)
             ? movePayload.lines[movePayload.lines.length - 1]
             : "";
@@ -247,12 +267,138 @@ async function captureBoardImageSet(options = {}) {
             `[${logPrefix}] axis move complete dX=${measuredX}mm dY=${measuredY}mm ${finalMoveLine}`
           );
           await wait(CAPTURE_CORNER_SETTLE_MS);
-          previousAbsOffset = absOffset;
-          step += 1;
+
+          const finalEdgeReading = findSelectedColorBoardEdge(video, edge);
+          if (!finalEdgeReading) {
+            appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Edge disappeared after auto-correct.`);
+            return null;
+          }
+
+          const finalOffsetMm = edgeOffsetMm(finalEdgeReading, edge);
+          if (Math.abs(finalOffsetMm) <= toleranceMm) {
+            const position = await readAxisWorkPosition();
+            appendTerminalLine(
+              `[${logPrefix}] ${edge} edge aligned at WPos X=${position.x.toFixed(1)} Y=${position.y.toFixed(1)}`
+            );
+            return position;
+          }
+
+          appendTerminalLine(
+            `[${logPrefix}] ${edge} edge still outside tolerance after auto-correct. offset=${finalOffsetMm.toFixed(1)}mm`
+          );
+          return null;
         }
 
-        appendTerminalLine(`[${logPrefix}] ${edge} alignment failed. Board edge never reached target.`);
+        appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. No board edge is visible.`);
         return null;
+      }
+
+      function findSelectedColorBoardEdge(video, edge) {
+        const settings = readBoardSettings();
+        const targetRgb = {
+          red: settings.backgroundR,
+          green: settings.backgroundG,
+          blue: settings.backgroundB
+        };
+        const targetHsl = rgbToHsl(
+          settings.backgroundR,
+          settings.backgroundG,
+          settings.backgroundB
+        );
+        const sampleWidth = 320;
+        const sampleHeight = Math.max(1, Math.round(sampleWidth * video.videoHeight / video.videoWidth));
+        const canvas = document.createElement("canvas");
+        canvas.width = sampleWidth;
+        canvas.height = sampleHeight;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.drawImage(video, 0, 0, sampleWidth, sampleHeight);
+        const image = context.getImageData(0, 0, sampleWidth, sampleHeight);
+        const data = image.data;
+        const rowCounts = new Array(sampleHeight).fill(0);
+        const columnCounts = new Array(sampleWidth).fill(0);
+
+        for (let y = 0; y < sampleHeight; y += 1) {
+          for (let x = 0; x < sampleWidth; x += 1) {
+            const offset = (y * sampleWidth + x) * 4;
+            if (boardPixelMatches(data[offset], data[offset + 1], data[offset + 2], targetRgb, targetHsl)) {
+              rowCounts[y] += 1;
+              columnCounts[x] += 1;
+            }
+          }
+        }
+
+        return edge === "right"
+          ? findRightColorToRandomEdge(columnCounts, sampleWidth, sampleHeight, video, settings)
+          : findBottomColorToRandomEdge(rowCounts, sampleWidth, sampleHeight, video, settings);
+      }
+
+      function findBottomColorToRandomEdge(rowCounts, sampleWidth, sampleHeight, video, settings) {
+        const minBoardPixels = Math.max(10, Math.round(sampleWidth * 0.12));
+        const belowRandomPixels = Math.round(sampleWidth * 0.06);
+        const windowRows = Math.max(2, Math.round(sampleHeight * 0.012));
+
+        for (let y = sampleHeight - windowRows - 1; y >= windowRows; y -= 1) {
+          const aboveColor = averageCounts(rowCounts, y - windowRows, y);
+          const belowColor = averageCounts(rowCounts, y + 1, y + 1 + windowRows);
+          if (aboveColor >= minBoardPixels && belowColor <= belowRandomPixels) {
+            return {
+              edgePixel: y * (video.videoHeight / sampleHeight),
+              targetPixel: video.videoHeight * (1 - CAPTURE_BOTTOM_MARGIN_RATIO),
+              pixelsPerMm: video.videoHeight / settings.fovHeightMm
+            };
+          }
+        }
+
+        return null;
+      }
+
+      function findRightColorToRandomEdge(columnCounts, sampleWidth, sampleHeight, video, settings) {
+        const minBoardPixels = Math.max(10, Math.round(sampleHeight * 0.12));
+        const outsideRandomPixels = Math.round(sampleHeight * 0.06);
+        const windowColumns = Math.max(2, Math.round(sampleWidth * 0.012));
+
+        for (let x = sampleWidth - windowColumns - 1; x >= windowColumns; x -= 1) {
+          const leftColor = averageCounts(columnCounts, x - windowColumns, x);
+          const rightColor = averageCounts(columnCounts, x + 1, x + 1 + windowColumns);
+          if (leftColor >= minBoardPixels && rightColor <= outsideRandomPixels) {
+            return {
+              edgePixel: x * (video.videoWidth / sampleWidth),
+              targetPixel: video.videoWidth * (1 - CAPTURE_BOTTOM_MARGIN_RATIO),
+              pixelsPerMm: video.videoWidth / settings.fovWidthMm
+            };
+          }
+        }
+
+        return null;
+      }
+
+      function averageCounts(counts, startIndex, endIndex) {
+        const start = Math.max(0, startIndex);
+        const end = Math.min(counts.length - 1, endIndex);
+        let total = 0;
+        let count = 0;
+
+        for (let index = start; index <= end; index += 1) {
+          total += counts[index];
+          count += 1;
+        }
+
+        return count ? total / count : 0;
+      }
+
+      function edgeOffsetMm(edgeReading) {
+        return (edgeReading.edgePixel - edgeReading.targetPixel) / edgeReading.pixelsPerMm;
+      }
+
+      function signedEdgeCorrectionMove(offsetMm, edge, distanceMm) {
+        const sign = edge === "right" ? CAPTURE_RIGHT_SIGN_X : CAPTURE_BOTTOM_SIGN_Y;
+        return offsetMm < 0 ? distanceMm * sign : -distanceMm * sign;
+      }
+
+      function axisMoveLog(edge, moveMm) {
+        return edge === "right"
+          ? `moveX=${moveMm.toFixed(1)}mm`
+          : `moveY=${moveMm.toFixed(1)}mm`;
       }
 
       function visibleBoardEdgeOffset(board, video, edge) {
