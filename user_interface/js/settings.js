@@ -117,15 +117,11 @@
         const needsVerticalTravel = settings.heightMm > settings.fovHeightMm;
 
         if (needsHorizontalTravel && needsVerticalTravel) {
-          return "corner";
+          return "bottom";
         }
 
         if (needsVerticalTravel) {
           return "bottom";
-        }
-
-        if (needsHorizontalTravel) {
-          return "right";
         }
 
         return "none";

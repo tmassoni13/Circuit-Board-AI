@@ -262,18 +262,8 @@ async function captureBoardImageSet(options = {}) {
           return alignCameraToVisibleBoardEdge(logPrefix, "bottom", cancelToken, requireMachineRunning);
         }
 
-        if (alignmentMode === "right") {
-          appendTerminalLine(`[${logPrefix}] board fits FOV height. Aligning right edge only.`);
-          return alignCameraToVisibleBoardEdge(logPrefix, "right", cancelToken, requireMachineRunning);
-        }
-
-        appendTerminalLine(`[${logPrefix}] board exceeds FOV width and height. Aligning visible corner.`);
-        const bottomAligned = await alignCameraToVisibleBoardEdge(logPrefix, "bottom", cancelToken, requireMachineRunning);
-        if (!bottomAligned) {
-          return null;
-        }
-
-        return alignCameraToVisibleBoardEdge(logPrefix, "right", cancelToken, requireMachineRunning);
+        appendTerminalLine(`[${logPrefix}] right edge alignment skipped. Operator-set right side is being used.`);
+        return readAxisWorkPosition();
       }
 
       async function alignCameraToVisibleBoardEdge(logPrefix, edge, cancelToken, requireMachineRunning) {
