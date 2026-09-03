@@ -18,10 +18,15 @@
 
       async function startMachine() {
         setMachineRunning(true);
+        const startupToken = captureCancelToken;
         setMachineStatus("CHECKING AXIS", "searching");
         appendTerminalLine("[SYSTEM] Auto mode starting. Calibrating camera view.");
 
         const axisReady = await ensureAxisConnectedForStart();
+        if (!machineRunning || captureCancelToken !== startupToken) {
+          return;
+        }
+
         if (!axisReady) {
           machineRunning = false;
           setStartupControlMode("failure");
@@ -32,9 +37,16 @@
 
         setMachineStatus("2D AXIS CONNECTED", "running");
         await wait(350);
+        if (!machineRunning || captureCancelToken !== startupToken) {
+          return;
+        }
 
         setMachineStatus("SETTING AXIS ZERO", "searching");
         const zeroReady = await setAxisZero();
+        if (!machineRunning || captureCancelToken !== startupToken) {
+          return;
+        }
+
         if (!zeroReady) {
           machineRunning = false;
           setStartupControlMode("failure");
@@ -44,8 +56,15 @@
         }
 
         await wait(350);
+        if (!machineRunning || captureCancelToken !== startupToken) {
+          return;
+        }
 
         const cameraReady = await ensureCameraConnectedForStart();
+        if (!machineRunning || captureCancelToken !== startupToken) {
+          return;
+        }
+
         if (!cameraReady) {
           machineRunning = false;
           setStartupControlMode("failure");
@@ -56,16 +75,24 @@
 
         setMachineStatus("CAMERA CONNECTED", "running");
         await wait(350);
+        if (!machineRunning || captureCancelToken !== startupToken) {
+          return;
+        }
 
         setMachineStatus("CALIBRATING", "searching");
         await initializeFullAreaSearch();
         window.setTimeout(() => {
+          if (!machineRunning || captureCancelToken !== startupToken) {
+            return;
+          }
+
           setMachineStatus("SEARCHING FOR BOARD", "searching");
           startAutoBoardScan();
         }, 500);
       }
 
       function stopMachine() {
+        captureCancelToken += 1;
         setMachineRunning(false);
         setMachineStatus("SHUTTING DOWN", "searching");
         stopAutoBoardScan();

@@ -4,6 +4,7 @@ async function captureBoardImageSet(options = {}) {
         const logPrefix = options.logPrefix || "CAPTURE";
         const alignFromCamera = options.alignFromCamera === true;
         const shouldAnalyze = options.analyze !== false && logPrefix !== "TEST CAPTURE";
+        const cancelToken = captureCancelToken;
         const settings = readBoardSettings();
         const initialCapturePlan = buildBoardCapturePlan(settings, "center");
         const capturePlan = alignFromCamera && initialCapturePlan.requiresAxisTravel
@@ -25,8 +26,11 @@ async function captureBoardImageSet(options = {}) {
         const boardNumber = nextBoardNumber;
         const capturedImages = [];
         if (alignFromCamera && capturePlan.requiresAxisTravel) {
+          if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+            return false;
+          }
           const alignmentMode = captureAlignmentModeForSettings(settings);
-          const alignedOrigin = await alignCameraForCaptureMode(logPrefix, alignmentMode);
+          const alignedOrigin = await alignCameraForCaptureMode(logPrefix, alignmentMode, cancelToken, requireMachineRunning);
           if (!alignedOrigin) {
             lastCaptureFailureReason = `${alignmentMode} alignment failed`;
             setMachineStatus("ALIGNMENT FAILED", "error");
@@ -41,10 +45,17 @@ async function captureBoardImageSet(options = {}) {
             return false;
           }
 
+          if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+            return false;
+          }
+
           if (capturePlan.requiresAxisTravel) {
             if (alignFromCamera) {
-              await moveToNextRelativeCapturePosition(previousCaptureTarget, target);
+              await moveToNextRelativeCapturePosition(previousCaptureTarget, target, cancelToken, requireMachineRunning);
             } else {
+              if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+                return false;
+              }
               await moveAxisToCaptureTarget(target);
             }
           }
@@ -52,7 +63,9 @@ async function captureBoardImageSet(options = {}) {
           const preCaptureSettleMs = target.imageNumber === 2
             ? CAPTURE_SECOND_IMAGE_PRE_SETTLE_MS
             : CAPTURE_PRE_IMAGE_SETTLE_MS;
-          await wait(preCaptureSettleMs);
+          if (!await waitForCapture(preCaptureSettleMs, cancelToken, requireMachineRunning)) {
+            return false;
+          }
 
           const blob = await captureStillBlob();
           if (!blob) {
@@ -71,13 +84,18 @@ async function captureBoardImageSet(options = {}) {
             `[${logPrefix}] board ${boardNumber} image ${target.imageNumber}/${capturePlan.imagesPerBoard} dX=${target.xMm.toFixed(1)} dY=${target.yMm.toFixed(1)}`
           );
           previousCaptureTarget = target;
-          await wait(CAPTURE_POST_IMAGE_SETTLE_MS);
+          if (!await waitForCapture(CAPTURE_POST_IMAGE_SETTLE_MS, cancelToken, requireMachineRunning)) {
+            return false;
+          }
         }
 
         nextBoardNumber += 1;
         nextImageNumberForBoard = 1;
 
         if (capturePlan.requiresAxisTravel) {
+          if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+            return false;
+          }
           await moveAxisToCaptureTarget({ xMm: 0, yMm: 0, imageNumber: 0 });
         }
 
@@ -131,7 +149,7 @@ async function captureBoardImageSet(options = {}) {
         }
       }
 
-      async function moveToNextRelativeCapturePosition(previousTarget, nextTarget) {
+      async function moveToNextRelativeCapturePosition(previousTarget, nextTarget, cancelToken, requireMachineRunning) {
         // After visual alignment, the current camera position is image 1.
         // Every later image is just the relative distance from the previous
         // planned tile. This avoids tying the scan sequence to the original
@@ -148,34 +166,38 @@ async function captureBoardImageSet(options = {}) {
           `[CAPTURE MOVE] relative X=${xMove.toFixed(1)}mm Y=${yMove.toFixed(1)}mm`
         );
 
+        if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+          return;
+        }
+
         await moveAxisRelative(xMove, yMove, SEARCH_FEED_MM_MIN);
       }
 
-      async function alignCameraForCaptureMode(logPrefix, alignmentMode) {
+      async function alignCameraForCaptureMode(logPrefix, alignmentMode, cancelToken, requireMachineRunning) {
         if (alignmentMode === "none") {
           return readAxisWorkPosition();
         }
 
         if (alignmentMode === "bottom") {
           appendTerminalLine(`[${logPrefix}] board fits FOV width. Aligning bottom edge only.`);
-          return alignCameraToVisibleBoardEdge(logPrefix, "bottom");
+          return alignCameraToVisibleBoardEdge(logPrefix, "bottom", cancelToken, requireMachineRunning);
         }
 
         if (alignmentMode === "right") {
           appendTerminalLine(`[${logPrefix}] board fits FOV height. Aligning right edge only.`);
-          return alignCameraToVisibleBoardEdge(logPrefix, "right");
+          return alignCameraToVisibleBoardEdge(logPrefix, "right", cancelToken, requireMachineRunning);
         }
 
         appendTerminalLine(`[${logPrefix}] board exceeds FOV width and height. Aligning visible corner.`);
-        const bottomAligned = await alignCameraToVisibleBoardEdge(logPrefix, "bottom");
+        const bottomAligned = await alignCameraToVisibleBoardEdge(logPrefix, "bottom", cancelToken, requireMachineRunning);
         if (!bottomAligned) {
           return null;
         }
 
-        return alignCameraToVisibleBoardEdge(logPrefix, "right");
+        return alignCameraToVisibleBoardEdge(logPrefix, "right", cancelToken, requireMachineRunning);
       }
 
-      async function alignCameraToVisibleBoardEdge(logPrefix, edge) {
+      async function alignCameraToVisibleBoardEdge(logPrefix, edge, cancelToken, requireMachineRunning) {
         const video = document.getElementById("webcam-preview");
         if (!video.videoWidth || !video.videoHeight) {
           appendTerminalLine(`[${logPrefix}] cannot align ${edge} edge. Camera frame is not ready.`);
@@ -187,6 +209,10 @@ async function captureBoardImageSet(options = {}) {
         let searchMoves = 0;
 
         while (!edgeReading && searchMoves < CAPTURE_EDGE_MAX_SEARCH_MOVES) {
+          if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+            return null;
+          }
+
           const searchMoveMm = missingEdgeSearchMove(edge);
           searchMoves += 1;
           appendTerminalLine(
@@ -197,8 +223,14 @@ async function captureBoardImageSet(options = {}) {
             edge === "bottom" ? searchMoveMm : 0,
             CAPTURE_CORNER_FEED_MM_MIN
           );
-          await wait(CAPTURE_CORNER_SETTLE_MS);
+          if (!await waitForCapture(CAPTURE_CORNER_SETTLE_MS, cancelToken, requireMachineRunning)) {
+            return null;
+          }
           edgeReading = findSelectedColorBoardEdge(video, edge);
+        }
+
+        if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+          return null;
         }
 
         if (!edgeReading) {
@@ -234,12 +266,17 @@ async function captureBoardImageSet(options = {}) {
         appendTerminalLine(
           `[${logPrefix}] ${edge} edge correction offset=${offsetMm.toFixed(1)}mm ${axisMoveLog(edge, autoCorrectMoveMm)}`
         );
+        if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+          return null;
+        }
         await moveAxisRelative(
           edge === "right" ? autoCorrectMoveMm : 0,
           edge === "bottom" ? autoCorrectMoveMm : 0,
           CAPTURE_CORNER_FEED_MM_MIN
         );
-        await wait(CAPTURE_CORNER_SETTLE_MS);
+        if (!await waitForCapture(CAPTURE_CORNER_SETTLE_MS, cancelToken, requireMachineRunning)) {
+          return null;
+        }
 
         const finalEdgeReading = findSelectedColorBoardEdge(video, edge);
         if (!finalEdgeReading) {
@@ -262,6 +299,37 @@ async function captureBoardImageSet(options = {}) {
           `[${logPrefix}] ${edge} alignment failed. Edge still outside tolerance after correction. offset=${finalOffsetMm.toFixed(1)}mm`
         );
         return null;
+      }
+
+      function captureWasCanceled(cancelToken, requireMachineRunning = true) {
+        const tokenWasCanceled = captureCancelToken !== cancelToken;
+        const stoppedDuringAutoRun = requireMachineRunning && !machineRunning;
+
+        if (tokenWasCanceled || stoppedDuringAutoRun) {
+          lastCaptureFailureReason = "machine was stopped during capture sequence";
+          if (lastCaptureCancelLogToken !== captureCancelToken) {
+            appendTerminalLine("[CAPTURE] stopped. Capture sequence canceled.");
+            lastCaptureCancelLogToken = captureCancelToken;
+          }
+          return true;
+        }
+
+        return false;
+      }
+
+      async function waitForCapture(milliseconds, cancelToken, requireMachineRunning = true) {
+        const intervalMs = 50;
+        const deadline = Date.now() + milliseconds;
+
+        while (Date.now() < deadline) {
+          if (captureWasCanceled(cancelToken, requireMachineRunning)) {
+            return false;
+          }
+
+          await wait(Math.min(intervalMs, deadline - Date.now()));
+        }
+
+        return !captureWasCanceled(cancelToken, requireMachineRunning);
       }
 
       function findSelectedColorBoardEdge(video, edge) {
