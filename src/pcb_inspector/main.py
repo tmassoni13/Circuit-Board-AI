@@ -22,9 +22,9 @@ CONVEYOR_RELAY_OUTPUT_PINS = {
     2: 35,
 }
 CONVEYOR_SENSOR_INPUT_PINS = {
-    1: 31,
+    1: 29,
     2: 37,
-    3: 29,
+    3: 31,
 }
 # The Omron E3Z-D61 sensor interface is expected to provide a safe 0-3.3 V
 # signal to the Jetson. With the current divider measurements, HIGH means clear
@@ -38,6 +38,30 @@ CONVEYOR_DIRECTION_INTERLOCKS = {
 CONVEYOR_RELAY_ACTIVE_LOW = True
 
 
+def parse_int_field(payload, field_name):
+    """Return an integer request field with a clear error for bad UI payloads."""
+    value = payload.get(field_name)
+    if value is None or value == "":
+        raise ValueError(f"Missing required field: {field_name}")
+
+    try:
+        return int(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"Invalid integer for {field_name}: {value!r}") from error
+
+
+def parse_float_field(payload, field_name, default):
+    """Return a float request field while keeping endpoint errors readable."""
+    value = payload.get(field_name, default)
+    if value is None or value == "":
+        return float(default)
+
+    try:
+        return float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"Invalid number for {field_name}: {value!r}") from error
+
+
 class ConveyorIoController:
     """Small Jetson GPIO adapter for conveyor motor outputs and board sensors.
 
@@ -46,9 +70,9 @@ class ConveyorIoController:
 
     - pin 33: conveyor forward relay output
     - pin 35: conveyor reverse relay output
-    - pin 31: start diffuse reflective sensor
+    - pin 29: start diffuse reflective sensor
     - pin 37: camera/imaging diffuse reflective sensor
-    - pin 29: end diffuse reflective sensor
+    - pin 31: end diffuse reflective sensor
 
     Relay ON currently drives the output pin LOW because the installed relay
     board is active-low. If the relay hardware changes, flip
@@ -576,7 +600,7 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                     return
 
                 if endpoint == "/api/conveyor-relay":
-                    channel = int(payload.get("channel"))
+                    channel = parse_int_field(payload, "channel")
                     state = bool(payload.get("state"))
                     self.send_json(200, CONVEYOR_IO.set_channel(channel, state))
                     return
@@ -590,9 +614,9 @@ def serve_ui(host: str, port: int, root: Path) -> None:
                     return
 
                 if endpoint == "/api/conveyor-move-until-sensor":
-                    direction_channel = int(payload.get("direction_channel"))
-                    target_sensor = int(payload.get("target_sensor"))
-                    timeout_seconds = float(payload.get("timeout_seconds", 20.0))
+                    direction_channel = parse_int_field(payload, "direction_channel")
+                    target_sensor = parse_int_field(payload, "target_sensor")
+                    timeout_seconds = parse_float_field(payload, "timeout_seconds", 20.0)
                     result = CONVEYOR_IO.move_until_sensor(
                         direction_channel,
                         target_sensor,

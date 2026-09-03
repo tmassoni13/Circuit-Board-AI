@@ -17,10 +17,10 @@
       const CAPTURE_CORNER_SETTLE_MS = 500;
       const CAPTURE_CORNER_EDGE_WAIT_FRAMES = 20;
       const CAPTURE_CORNER_EDGE_WAIT_MS = 100;
-      const AXIS_RELATIVE_SIGN_X = 1;
+      const AXIS_RELATIVE_SIGN_X = -1;
       const AXIS_RELATIVE_SIGN_Y = 1;
-      const CAPTURE_BOTTOM_SIGN_Y = AXIS_RELATIVE_SIGN_Y;
-      const CAPTURE_RIGHT_SIGN_X = AXIS_RELATIVE_SIGN_X;
+      const CAPTURE_BOTTOM_SIGN_Y = 1;
+      const CAPTURE_RIGHT_SIGN_X = 1;
       const AXIS_AUTO_ALIGN_ENABLED = true;
       const AXIS_BRIDGE_URL = "http://127.0.0.1:8765";
       const AXIS_FEED_MM_MIN = 6000;
@@ -34,8 +34,8 @@
       const AXIS_MIN_GREEN_PIXEL_RATIO = 0.01;
       const AXIS_SMOOTHING = 0.72;
       const AXIS_STOP_ALIGNMENT = 0.88;
-      const AXIS_SIGN_X = AXIS_RELATIVE_SIGN_X;
-      const AXIS_SIGN_Y = AXIS_RELATIVE_SIGN_Y;
+      const AXIS_SIGN_X = 1;
+      const AXIS_SIGN_Y = 1;
       const SEARCH_MOVE_MM = 50;
       const DEFAULT_BOARD_WIDTH_MM = 100;
       const DEFAULT_BOARD_HEIGHT_MM = 100;
@@ -65,8 +65,8 @@
         }
       };
       const GEMINI_ANALYSIS_TIMEOUT_MS = 120000;
-      const CAPTURE_SCAN_SIGN_X = AXIS_RELATIVE_SIGN_X;
-      const CAPTURE_SCAN_SIGN_Y = AXIS_RELATIVE_SIGN_Y;
+      const CAPTURE_SCAN_SIGN_X = 1;
+      const CAPTURE_SCAN_SIGN_Y = 1;
       const AXIS_ABSOLUTE_MIN_X_MM = -180;
       const AXIS_ABSOLUTE_MAX_X_MM = 180;
       const AXIS_ABSOLUTE_MIN_Y_MM = -175;

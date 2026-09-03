@@ -619,9 +619,11 @@
       }
 
       async function moveAxisRelative(xMm, yMm, feedMmMin = SEARCH_FEED_MM_MIN) {
+        const machineXmm = xMm * AXIS_RELATIVE_SIGN_X;
+        const machineYmm = yMm * AXIS_RELATIVE_SIGN_Y;
         return postAxis("/axis/move", {
-          x_mm: xMm,
-          y_mm: yMm,
+          x_mm: machineXmm,
+          y_mm: machineYmm,
           feed_mm_min: feedMmMin
         });
       }
