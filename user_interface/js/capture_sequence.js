@@ -96,7 +96,18 @@ async function captureBoardImageSet(options = {}) {
           if (captureWasCanceled(cancelToken, requireMachineRunning)) {
             return false;
           }
-          await moveAxisToCaptureTarget({ xMm: 0, yMm: 0, imageNumber: 0 });
+
+          if (alignFromCamera) {
+            appendTerminalLine(`[${logPrefix}] returning camera to image 1 position for next board.`);
+            await moveToNextRelativeCapturePosition(
+              previousCaptureTarget,
+              capturePlan.positions[0],
+              cancelToken,
+              requireMachineRunning
+            );
+          } else {
+            await moveAxisToCaptureTarget({ xMm: 0, yMm: 0, imageNumber: 0 });
+          }
         }
 
         if (shouldAnalyze) {
