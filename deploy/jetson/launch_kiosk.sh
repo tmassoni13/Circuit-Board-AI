@@ -17,15 +17,15 @@ for _ in {1..60}; do
 done
 
 if command -v chromium-browser >/dev/null 2>&1; then
-  exec chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble "${APP_URL}"
+  exec chromium-browser --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-pinch --overscroll-history-navigation=0 "${APP_URL}"
 fi
 
 if command -v chromium >/dev/null 2>&1; then
-  exec chromium --kiosk --noerrdialogs --disable-session-crashed-bubble "${APP_URL}"
+  exec chromium --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-pinch --overscroll-history-navigation=0 "${APP_URL}"
 fi
 
 if command -v google-chrome >/dev/null 2>&1; then
-  exec google-chrome --kiosk --noerrdialogs --disable-session-crashed-bubble "${APP_URL}"
+  exec google-chrome --kiosk --noerrdialogs --disable-session-crashed-bubble --disable-pinch --overscroll-history-navigation=0 "${APP_URL}"
 fi
 
 echo "No supported Chromium browser was found. Open ${APP_URL} manually." >&2

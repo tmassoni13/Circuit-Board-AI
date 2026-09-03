@@ -91,7 +91,47 @@
         if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "q") {
           event.preventDefault();
           confirmCloseApplication();
+          return;
         }
+
+        if (appCycleIsActive() && reloadShortcutWasPressed(event)) {
+          event.preventDefault();
+          event.stopPropagation();
+          appendTerminalLine("[SYSTEM] Reload blocked while machine cycle is active.");
+        }
+      }
+
+      function reloadShortcutWasPressed(event) {
+        const key = event.key.toLowerCase();
+        return (
+          key === "f5" ||
+          (event.ctrlKey && key === "r") ||
+          (event.metaKey && key === "r") ||
+          (event.ctrlKey && event.shiftKey && key === "r") ||
+          (event.metaKey && event.shiftKey && key === "r")
+        );
+      }
+
+      function appCycleIsActive() {
+        return (
+          machineRunning ||
+          boardWorkflowInProgress ||
+          autoConveyorState !== "idle" ||
+          autoConveyorBusy ||
+          searchMoveInFlight ||
+          axisMoveInFlight ||
+          Object.keys(relayPendingStates).length > 0
+        );
+      }
+
+      function protectActiveCycleFromReload(event) {
+        if (!appCycleIsActive()) {
+          return;
+        }
+
+        event.preventDefault();
+        event.returnValue = "Machine cycle is active. Stop the machine before reloading.";
+        return event.returnValue;
       }
 
       async function closeApplication() {
