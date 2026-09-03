@@ -8,6 +8,10 @@
           saved.fovWidthMm || DEFAULT_CAMERA_FOV_WIDTH_MM;
         document.getElementById("camera-fov-height-mm").value =
           saved.fovHeightMm || DEFAULT_CAMERA_FOV_HEIGHT_MM;
+        document.getElementById("large-board-step-extra-mm").value =
+          Number.isFinite(saved.largeBoardStepExtraMm)
+            ? saved.largeBoardStepExtraMm
+            : CAPTURE_MULTI_IMAGE_EXTRA_STEP_MM;
         document.getElementById("board-background-color").value =
           saved.backgroundColor ||
           legacyBackgroundColor(saved) ||
@@ -32,6 +36,7 @@
           heightMm: clampNumberInput("board-height-mm", 10, 500, DEFAULT_BOARD_HEIGHT_MM),
           fovWidthMm: clampNumberInput("camera-fov-width-mm", 10, 500, DEFAULT_CAMERA_FOV_WIDTH_MM),
           fovHeightMm: clampNumberInput("camera-fov-height-mm", 10, 500, DEFAULT_CAMERA_FOV_HEIGHT_MM),
+          largeBoardStepExtraMm: clampNumberInput("large-board-step-extra-mm", -100, 200, CAPTURE_MULTI_IMAGE_EXTRA_STEP_MM),
           backgroundColor,
           backgroundR: backgroundRgb.r,
           backgroundG: backgroundRgb.g,
@@ -92,6 +97,7 @@
         document.getElementById("board-height-mm").value = DEFAULT_BOARD_HEIGHT_MM;
         document.getElementById("camera-fov-width-mm").value = DEFAULT_CAMERA_FOV_WIDTH_MM;
         document.getElementById("camera-fov-height-mm").value = DEFAULT_CAMERA_FOV_HEIGHT_MM;
+        document.getElementById("large-board-step-extra-mm").value = CAPTURE_MULTI_IMAGE_EXTRA_STEP_MM;
         document.getElementById("board-background-color").value = DEFAULT_BOARD_BACKGROUND_COLOR;
         document.getElementById("gemini-upload-quality").value = DEFAULT_GEMINI_UPLOAD_QUALITY;
         autoCaptureFolderName = DEFAULT_IMAGE_FOLDER_NAME;
@@ -137,14 +143,16 @@
           settings.fovWidthMm,
           columns,
           origin,
-          useFullFovStep
+          useFullFovStep,
+          settings.largeBoardStepExtraMm
         );
         const yPositions = axisPositionsForDimension(
           settings.heightMm,
           settings.fovHeightMm,
           rows,
           origin,
-          useFullFovStep
+          useFullFovStep,
+          settings.largeBoardStepExtraMm
         );
         const positions = [];
 
@@ -174,6 +182,7 @@
           rows,
           imagesPerBoard,
           useFullFovStep,
+          largeBoardStepExtraMm: settings.largeBoardStepExtraMm,
           requiresAxisTravel: positions.length > 1,
           positions
         };
@@ -191,7 +200,7 @@
         return Math.max(2, Math.ceil((boardMm - fovMm) / usableStepMm) + 1);
       }
 
-      function axisPositionsForDimension(boardMm, fovMm, count, origin = "center", useFullFovStep = false) {
+      function axisPositionsForDimension(boardMm, fovMm, count, origin = "center", useFullFovStep = false, largeBoardStepExtraMm = CAPTURE_MULTI_IMAGE_EXTRA_STEP_MM) {
         if (count <= 1) {
           return [0];
         }
@@ -199,7 +208,7 @@
         const stepMm = Math.max(
           1,
           useFullFovStep
-            ? fovMm + CAPTURE_MULTI_IMAGE_EXTRA_STEP_MM
+            ? fovMm + largeBoardStepExtraMm
             : fovMm - CAPTURE_OVERLAP_MM
         );
         const totalTravelMm = stepMm * (count - 1);
