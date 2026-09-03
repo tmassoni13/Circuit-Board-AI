@@ -130,17 +130,21 @@
       function buildBoardCapturePlan(settings = readBoardSettings(), origin = "center") {
         const columns = imageCountForDimension(settings.widthMm, settings.fovWidthMm);
         const rows = imageCountForDimension(settings.heightMm, settings.fovHeightMm);
+        const imagesPerBoard = columns * rows;
+        const useFullFovStep = imagesPerBoard > 2;
         const xPositions = axisPositionsForDimension(
           settings.widthMm,
           settings.fovWidthMm,
           columns,
-          origin
+          origin,
+          useFullFovStep
         );
         const yPositions = axisPositionsForDimension(
           settings.heightMm,
           settings.fovHeightMm,
           rows,
-          origin
+          origin,
+          useFullFovStep
         );
         const positions = [];
 
@@ -168,7 +172,8 @@
         return {
           columns,
           rows,
-          imagesPerBoard: positions.length,
+          imagesPerBoard,
+          useFullFovStep,
           requiresAxisTravel: positions.length > 1,
           positions
         };
@@ -186,12 +191,12 @@
         return Math.max(2, Math.ceil((boardMm - fovMm) / usableStepMm) + 1);
       }
 
-      function axisPositionsForDimension(boardMm, fovMm, count, origin = "center") {
+      function axisPositionsForDimension(boardMm, fovMm, count, origin = "center", useFullFovStep = false) {
         if (count <= 1) {
           return [0];
         }
 
-        const stepMm = Math.max(1, fovMm - CAPTURE_OVERLAP_MM);
+        const stepMm = Math.max(1, useFullFovStep ? fovMm : fovMm - CAPTURE_OVERLAP_MM);
         const totalTravelMm = stepMm * (count - 1);
         const startMm = origin === "corner" ? 0 : -totalTravelMm / 2;
         const positions = [];
